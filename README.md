@@ -83,3 +83,11 @@ Required repository secrets:
 - `ARTIFACT_SIGNING_ACCOUNT_NAME`: Azure Artifact Signing account name.
 - `ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME`: Azure Artifact Signing certificate profile name.
 - `PSGALLERY_API_KEY`: PowerShell Gallery API key allowed to publish `ownerlens`.
+
+Configure them from local environment variables or a local `.env.github-secrets` file:
+
+```powershell
+./scripts/Set-OwnerLensLightGitHubSecrets.ps1
+```
+
+The dotenv file should use `NAME=value` lines. It is ignored by git.
