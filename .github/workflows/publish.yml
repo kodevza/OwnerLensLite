@@ -1,0 +1,99 @@
+name: Sign and publish preview
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  test-sign-publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Install-Module Pester -Scope CurrentUser -MinimumVersion 5.7.0 -Force -SkipPublisherCheck
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.7.0 -Force
+          Invoke-Pester ./tests -CI
+
+      - name: Import code-signing certificate
+        shell: pwsh
+        env:
+          CODE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.CODE_SIGNING_CERTIFICATE_BASE64 }}
+          CODE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CODE_SIGNING_CERTIFICATE_BASE64)) {
+            throw "Missing CODE_SIGNING_CERTIFICATE_BASE64 secret."
+          }
+
+          if ([string]::IsNullOrWhiteSpace($env:CODE_SIGNING_CERTIFICATE_PASSWORD)) {
+            throw "Missing CODE_SIGNING_CERTIFICATE_PASSWORD secret."
+          }
+
+          $certificatePath = Join-Path $env:RUNNER_TEMP "ownerlens-signing.pfx"
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:CODE_SIGNING_CERTIFICATE_BASE64))
+          $securePassword = ConvertTo-SecureString $env:CODE_SIGNING_CERTIFICATE_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword | Out-Null
+
+      - name: Sign PowerShell files
+        shell: pwsh
+        run: |
+          $certificate = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert |
+            Sort-Object NotAfter -Descending |
+            Select-Object -First 1
+
+          if (-not $certificate) {
+            throw "No code-signing certificate was imported."
+          }
+
+          $files = Get-ChildItem ./ownerlens -Recurse -Include *.ps1,*.psm1,*.psd1 -File
+          foreach ($file in $files) {
+            $signature = Set-AuthenticodeSignature -FilePath $file.FullName -Certificate $certificate -TimestampServer "http://timestamp.digicert.com"
+            if ($signature.Status -ne "Valid") {
+              throw "Signing failed for $($file.FullName): $($signature.StatusMessage)"
+            }
+          }
+
+      - name: Validate signed module
+        shell: pwsh
+        run: |
+          $manifest = Test-ModuleManifest ./ownerlens/ownerlens.psd1
+          if ($manifest.PrivateData.PSData.Prerelease -ne "preview") {
+            throw "Module manifest must publish with prerelease label 'preview'."
+          }
+
+          $badSignature = Get-ChildItem ./ownerlens -Recurse -Include *.ps1,*.psm1,*.psd1 -File |
+            Get-AuthenticodeSignature |
+            Where-Object Status -ne Valid
+
+          if ($badSignature) {
+            $badSignature | Format-Table -AutoSize
+            throw "One or more PowerShell files are not signed with a valid signature."
+          }
+
+      - name: Publish preview to PowerShell Gallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PSGALLERY_API_KEY)) {
+            throw "Missing PSGALLERY_API_KEY secret."
+          }
+
+          Publish-Module `
+            -Path ./ownerlens `
+            -Repository PSGallery `
+            -NuGetApiKey $env:PSGALLERY_API_KEY `
+            -Force

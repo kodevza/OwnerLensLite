@@ -1,0 +1,7 @@
+*.log
+*.tmp
+*.json
+!examples/*.json
+.DS_Store
+output/
+reports/
