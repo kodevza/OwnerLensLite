@@ -2,20 +2,32 @@ name: Sign and publish preview
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Preview module version, for example 0.1.0-preview"
+        required: false
+        default: "0.1.0-preview"
   push:
     tags:
       - "v*"
 
 permissions:
   contents: read
+  id-token: write
+
+env:
+  ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}
+  ARTIFACT_SIGNING_ACCOUNT_NAME: ${{ secrets.ARTIFACT_SIGNING_ACCOUNT_NAME }}
+  ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
 
 jobs:
   test-sign-publish:
     runs-on: windows-latest
+    environment: package-signing
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Pester
         shell: pwsh
@@ -28,43 +40,69 @@ jobs:
           Import-Module Pester -MinimumVersion 5.7.0 -Force
           Invoke-Pester ./tests -CI
 
-      - name: Import code-signing certificate
-        shell: pwsh
-        env:
-          CODE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.CODE_SIGNING_CERTIFICATE_BASE64 }}
-          CODE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGNING_CERTIFICATE_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:CODE_SIGNING_CERTIFICATE_BASE64)) {
-            throw "Missing CODE_SIGNING_CERTIFICATE_BASE64 secret."
-          }
-
-          if ([string]::IsNullOrWhiteSpace($env:CODE_SIGNING_CERTIFICATE_PASSWORD)) {
-            throw "Missing CODE_SIGNING_CERTIFICATE_PASSWORD secret."
-          }
-
-          $certificatePath = Join-Path $env:RUNNER_TEMP "ownerlens-signing.pfx"
-          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:CODE_SIGNING_CERTIFICATE_BASE64))
-          $securePassword = ConvertTo-SecureString $env:CODE_SIGNING_CERTIFICATE_PASSWORD -AsPlainText -Force
-          Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword | Out-Null
-
-      - name: Sign PowerShell files
+      - name: Set preview module version
         shell: pwsh
         run: |
-          $certificate = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert |
-            Sort-Object NotAfter -Descending |
-            Select-Object -First 1
-
-          if (-not $certificate) {
-            throw "No code-signing certificate was imported."
+          $ErrorActionPreference = "Stop"
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $env:GITHUB_REF_NAME -replace '^v', ''
+          } else {
+            "${{ inputs.version }}"
           }
 
-          $files = Get-ChildItem ./ownerlens -Recurse -Include *.ps1,*.psm1,*.psd1 -File
-          foreach ($file in $files) {
-            $signature = Set-AuthenticodeSignature -FilePath $file.FullName -Certificate $certificate -TimestampServer "http://timestamp.digicert.com"
-            if ($signature.Status -ne "Valid") {
-              throw "Signing failed for $($file.FullName): $($signature.StatusMessage)"
-            }
+          if ($version -notmatch '^(?<BaseVersion>\d+\.\d+\.\d+(?:\.\d+)?)(?:-(?<Prerelease>[0-9A-Za-z][0-9A-Za-z.-]*))?$') {
+            throw "Version '$version' is not a supported semantic version."
           }
+
+          $moduleVersion = [version]$Matches.BaseVersion
+          $prerelease = $Matches.Prerelease
+          if ([string]::IsNullOrWhiteSpace($prerelease)) {
+            $prerelease = "preview"
+          }
+
+          $manifestPath = Join-Path $PWD "ownerlens\ownerlens.psd1"
+          Update-ModuleManifest -Path $manifestPath -ModuleVersion $moduleVersion -Prerelease $prerelease
+
+          $manifest = Test-ModuleManifest $manifestPath
+          if ([string]$manifest.Version -ne [string]$moduleVersion) {
+            throw "Manifest version '$($manifest.Version)' does not match expected '$moduleVersion'."
+          }
+          if ($manifest.PrivateData.PSData.Prerelease -ne $prerelease) {
+            throw "Manifest prerelease '$($manifest.PrivateData.PSData.Prerelease)' does not match expected '$prerelease'."
+          }
+
+      - name: Validate Azure Artifact Signing configuration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:ARTIFACT_SIGNING_ENDPOINT)) { $missing += "ARTIFACT_SIGNING_ENDPOINT" }
+          if ([string]::IsNullOrWhiteSpace($env:ARTIFACT_SIGNING_ACCOUNT_NAME)) { $missing += "ARTIFACT_SIGNING_ACCOUNT_NAME" }
+          if ([string]::IsNullOrWhiteSpace($env:ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME)) { $missing += "ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME" }
+
+          if ($missing.Count -gt 0) {
+            throw "Tagged OwnerLens Light releases require Azure Artifact Signing. Missing secrets: $($missing -join ', ')"
+          }
+
+      - name: Azure login via OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign OwnerLens Light module files with Azure Artifact Signing
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.ARTIFACT_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          files-folder: ${{ github.workspace }}\ownerlens
+          files-folder-filter: ps1,psm1,psd1
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
 
       - name: Validate signed module
         shell: pwsh
@@ -74,14 +112,7 @@ jobs:
             throw "Module manifest must publish with prerelease label 'preview'."
           }
 
-          $badSignature = Get-ChildItem ./ownerlens -Recurse -Include *.ps1,*.psm1,*.psd1 -File |
-            Get-AuthenticodeSignature |
-            Where-Object Status -ne Valid
-
-          if ($badSignature) {
-            $badSignature | Format-Table -AutoSize
-            throw "One or more PowerShell files are not signed with a valid signature."
-          }
+          ./scripts/Test-OwnerLensLightSignatures.ps1 -Path ./ownerlens -RequireValid -RequireTimestamp
 
       - name: Publish preview to PowerShell Gallery
         shell: pwsh

@@ -72,10 +72,14 @@ Invoke-Pester ./tests
 
 ## Publishing
 
-The GitHub Actions workflow signs all module `.ps1`, `.psm1`, and `.psd1` files, then publishes the module to PowerShell Gallery as `ownerlens` with prerelease label `preview`.
+The GitHub Actions workflow uses the same signing model as the main OwnerLens package pipeline: Azure OIDC login plus Azure Artifact Signing. It signs all module `.ps1`, `.psm1`, and `.psd1` files, verifies Authenticode signatures and timestamps, then publishes the module to PowerShell Gallery as `ownerlens` with prerelease label `preview`.
 
 Required repository secrets:
 
-- `CODE_SIGNING_CERTIFICATE_BASE64`: base64-encoded PFX code-signing certificate.
-- `CODE_SIGNING_CERTIFICATE_PASSWORD`: password for the PFX.
+- `AZURE_CLIENT_ID`: federated identity client ID for Azure login.
+- `AZURE_TENANT_ID`: Azure tenant ID.
+- `AZURE_SUBSCRIPTION_ID`: Azure subscription ID.
+- `ARTIFACT_SIGNING_ENDPOINT`: Azure Artifact Signing endpoint.
+- `ARTIFACT_SIGNING_ACCOUNT_NAME`: Azure Artifact Signing account name.
+- `ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME`: Azure Artifact Signing certificate profile name.
 - `PSGALLERY_API_KEY`: PowerShell Gallery API key allowed to publish `ownerlens`.
