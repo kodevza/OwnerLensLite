@@ -40,7 +40,7 @@ Run from this directory:
 Or import the module directly:
 
 ```powershell
-Import-Module ./ownerlens/ownerlens.psd1 -Force
+Import-Module ./OwnerLensLight/OwnerLensLight.psd1 -Force
 Invoke-OwnerLensLight -EnterpriseApplication "<service-principal-object-id-or-app-id>"
 ```
 
@@ -116,7 +116,7 @@ Invoke-Pester ./tests
 
 ## Publishing
 
-The GitHub Actions workflow uses the same signing model as the main OwnerLens package pipeline: Azure OIDC login plus Azure Artifact Signing. It signs all module `.ps1`, `.psm1`, and `.psd1` files, verifies Authenticode signatures and timestamps, then publishes the module to PowerShell Gallery as `ownerlens` with prerelease label `preview`.
+The GitHub Actions workflow uses the same signing model as the main OwnerLens package pipeline: Azure OIDC login plus Azure Artifact Signing. It signs all module `.ps1`, `.psm1`, and `.psd1` files, verifies Authenticode signatures and timestamps, then publishes the module to PowerShell Gallery as `OwnerLensLight` with prerelease label `preview`.
 
 Required repository secrets:
 
@@ -126,7 +126,7 @@ Required repository secrets:
 - `ARTIFACT_SIGNING_ENDPOINT`: Azure Artifact Signing endpoint.
 - `ARTIFACT_SIGNING_ACCOUNT_NAME`: Azure Artifact Signing account name.
 - `ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME`: Azure Artifact Signing certificate profile name.
-- `PSGALLERY_API_KEY`: PowerShell Gallery API key allowed to publish `ownerlens`.
+- `PSGALLERY_API_KEY`: PowerShell Gallery API key allowed to publish `OwnerLensLight`.
 
 Configure them from local environment variables or a local `.env.github-secrets` file:
 

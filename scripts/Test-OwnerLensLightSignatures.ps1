@@ -4,7 +4,7 @@ Reports and optionally enforces Authenticode signature status for OwnerLens Ligh
 #>
 
 param(
-  [string[]]$Path = @(".\ownerlens"),
+  [string[]]$Path = @(".\OwnerLensLight"),
   [switch]$RequireValid,
   [switch]$RequireTimestamp,
   [string]$OutputJson = ""

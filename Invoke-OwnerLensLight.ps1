@@ -48,7 +48,7 @@ param(
 begin {
   $ErrorActionPreference = "Stop"
 
-  Import-Module (Join-Path $PSScriptRoot "ownerlens/ownerlens.psd1") -Force
+  Import-Module (Join-Path $PSScriptRoot "OwnerLensLight/OwnerLensLight.psd1") -Force
 }
 
 process {

@@ -60,7 +60,7 @@ jobs:
             $prerelease = "preview"
           }
 
-          $manifestPath = Join-Path $PWD "ownerlens\ownerlens.psd1"
+          $manifestPath = Join-Path $PWD "OwnerLensLight\OwnerLensLight.psd1"
           Update-ModuleManifest -Path $manifestPath -ModuleVersion $moduleVersion -Prerelease $prerelease
 
           $manifest = Test-ModuleManifest $manifestPath
@@ -97,7 +97,7 @@ jobs:
           endpoint: ${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}
           signing-account-name: ${{ secrets.ARTIFACT_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ secrets.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          files-folder: ${{ github.workspace }}\ownerlens
+          files-folder: ${{ github.workspace }}\OwnerLensLight
           files-folder-filter: ps1,psm1,psd1
           files-folder-recurse: true
           file-digest: SHA256
@@ -107,12 +107,12 @@ jobs:
       - name: Validate signed module
         shell: pwsh
         run: |
-          $manifest = Test-ModuleManifest ./ownerlens/ownerlens.psd1
+          $manifest = Test-ModuleManifest ./OwnerLensLight/OwnerLensLight.psd1
           if ($manifest.PrivateData.PSData.Prerelease -ne "preview") {
             throw "Module manifest must publish with prerelease label 'preview'."
           }
 
-          ./scripts/Test-OwnerLensLightSignatures.ps1 -Path ./ownerlens -RequireValid -RequireTimestamp
+          ./scripts/Test-OwnerLensLightSignatures.ps1 -Path ./OwnerLensLight -RequireValid -RequireTimestamp
 
       - name: Publish preview to PowerShell Gallery
         shell: pwsh
@@ -124,7 +124,7 @@ jobs:
           }
 
           Publish-Module `
-            -Path ./ownerlens `
+            -Path ./OwnerLensLight `
             -Repository PSGallery `
             -NuGetApiKey $env:PSGALLERY_API_KEY `
             -Force

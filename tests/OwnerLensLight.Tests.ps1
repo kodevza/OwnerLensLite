@@ -1,7 +1,7 @@
 BeforeAll {
-  Get-ChildItem -Path (Join-Path $PSScriptRoot "../ownerlens/Private") -Filter "*.ps1" -File |
+  Get-ChildItem -Path (Join-Path $PSScriptRoot "../OwnerLensLight/Private") -Filter "*.ps1" -File |
     ForEach-Object { . $_.FullName }
-  . (Join-Path $PSScriptRoot "../ownerlens/Public/Invoke-OwnerLensLight.ps1")
+  . (Join-Path $PSScriptRoot "../OwnerLensLight/Public/Invoke-OwnerLensLight.ps1")
 }
 
 Describe "OwnerLens Light Azure helper logic" {

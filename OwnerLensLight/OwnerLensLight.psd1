@@ -1,5 +1,5 @@
 @{
-  RootModule = 'ownerlens.psm1'
+  RootModule = 'OwnerLensLight.psm1'
   ModuleVersion = '0.1.0'
   GUID = '6b7b66f2-1df0-4e37-ae88-6dfec389736a'
   Author = 'OwnerLens'
@@ -15,6 +15,7 @@
   VariablesToExport = @()
   AliasesToExport = @()
   PrivateData = @{
+    Name = 'OwnerLens Light'
     PSData = @{
       Prerelease = 'preview'
       Tags = @('OwnerLens', 'Azure', 'Entra', 'EnterpriseApplication', 'ServicePrincipal', 'Preview')
