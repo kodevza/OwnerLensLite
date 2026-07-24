@@ -7,10 +7,13 @@ The script resolves a service principal by object ID, app ID, or exact display n
 - Azure RBAC scopes where the service principal has access.
 - Azure resource, resource group, and subscription dependencies implied by those RBAC scopes.
 - Recent Azure Monitor activity log entries that match the service principal identifiers.
+- Recent Azure Monitor activity callers under RBAC scopes assigned to the service principal.
 - Microsoft Graph app role assignments and delegated permission grants.
-- Group memberships and owners.
+- Group memberships, service principal owners, and application registration owners.
 
 Activity log matches are low-confidence usage evidence. They show recent access signals, not ownership proof.
+The RBAC scope activity caller view uses Azure Activity Logs, so it covers management-plane operations under the relevant subscription/resource group/resource scopes. It does not prove data-plane access such as blob reads/writes, secret reads, database queries, or application requests; those require resource diagnostic logs, usually routed to Log Analytics.
+Blob data-plane evidence uses the `StorageBlobLogs` Log Analytics table and looks for `GetBlob`, `PutBlob`, `PutBlock`, `PutBlockList`, `AppendBlock`, and `CopyBlob` by default.
 
 ## Requirements
 
@@ -45,6 +48,47 @@ Write a JSON report:
 
 ```powershell
 ./Invoke-OwnerLensLight.ps1 -EnterpriseApplication "<app-id>" -OutputPath ./reports/app-dependencies.json
+```
+
+Include blob data-plane evidence from a Log Analytics workspace that receives Storage Account diagnostic logs:
+
+```powershell
+./Invoke-OwnerLensLight.ps1 `
+  -EnterpriseApplication "<app-id>" `
+  -SubscriptionIds "sub-id-1,sub-id-2" `
+  -LogAnalyticsWorkspaceId "<workspace-guid>" `
+  -ActivityDays 30
+```
+
+The blob data-plane section reports storage accounts under the Enterprise Application's RBAC scopes, recent read/publish operations, and participants grouped by object ID, app ID, and UPN together when Azure logs them together. This matters for agent-style flows where communication can be bidirectional: a user may publish blobs to the agent while a service principal reads them, or the service principal may publish data that users read later. The signed-in Azure identity must be able to query the Log Analytics workspace, and the relevant Storage Accounts must have diagnostic settings sending blob logs to that workspace.
+
+Configure blob read/write diagnostic logs for storage accounts:
+
+```powershell
+./scripts/Set-StorageBlobReadDiagnosticLogs.ps1 `
+  -WorkspaceId "<workspace-guid>" `
+  -WhatIf
+```
+
+Remove `-WhatIf` to create or update the `ownerlens-blob-read-logs` diagnostic setting on each Blob service. By default the script scans all enabled subscriptions visible to the current Az account and enables `StorageRead` plus `StorageWrite`, which records blob reads and writes in `StorageBlobLogs`. Use `-SubscriptionIds` to limit the scan. If the workspace cannot be resolved from its GUID, use `-WorkspaceResourceId` with the full ARM resource ID.
+
+Show only potential owner candidates as TSV for easier copying:
+
+```powershell
+./Invoke-OwnerLensLight.ps1 -EnterpriseApplication "<app-id>" -OutputTable
+```
+
+The candidate TSV includes the candidate value, whether it came from a user, group, tag, or another source, a human-readable confidence value (`HIGH`, `MED`, or `LOW`), whether the evidence is `Direct` or `Indirect`, a short signal (`OWNER`, `TAG`, `RBAC`, `LOG`, or `MEMBERSHIP`), and concrete `evidenceId` values. For Azure signals, evidence ids are ARM resource ids or scopes such as `/subscriptions/.../resourceGroups/.../providers/...`. Tag candidates found directly on the inspected Enterprise Application use `TAG`; tag candidates found on Azure dependency resources use `RBAC`, because the tag is on a resource reached through RBAC assigned to the inspected service principal. Only configured owner tag names are promoted to owner candidates. User owner tags produce `User` candidates from the tag value, group owner tags produce `Group` candidates from the tag value, and generic tag owner tags produce `Tag` candidates such as `costCenter=12345`. When no candidate evidence is found, the TSV returns a `NotFound` row with relationship `None`, signal `NONE`, and evidence id `not-found`.
+
+Configure owner tag names when your tenant uses different tag keys:
+
+```powershell
+./Invoke-OwnerLensLight.ps1 `
+  -EnterpriseApplication "<app-id>" `
+  -UserOwnerTagNames "ownerMail","technicalOwner" `
+  -GroupOwnerTagNames "ownerGroup","team" `
+  -TagOwnerTagNames "owner","costCenter","billingCode" `
+  -OutputTable
 ```
 
 Skip Azure Monitor activity logs when you only need static access/dependency evidence:

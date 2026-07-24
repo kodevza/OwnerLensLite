@@ -6,11 +6,19 @@ function Get-GraphDependencies {
   )
 
   $servicePrincipalId = [string]$ServicePrincipal.objectId
+  $applicationObjectId = [string]$ServicePrincipal.applicationObjectId
   $resourcePrincipalIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
   $owners = Invoke-GraphPagedRequest `
     -OperationName "Microsoft Graph service principal owners request" `
     -Uri "/v1.0/servicePrincipals/$servicePrincipalId/owners?`$select=id,displayName,userPrincipalName,mail&`$top=999"
+
+  $applicationOwners = @()
+  if (-not [string]::IsNullOrWhiteSpace($applicationObjectId)) {
+    $applicationOwners = Invoke-GraphPagedRequest `
+      -OperationName "Microsoft Graph application owners request" `
+      -Uri "/v1.0/applications/$applicationObjectId/owners?`$select=id,displayName,userPrincipalName,mail&`$top=999"
+  }
 
   $appRoleAssignments = Invoke-GraphPagedRequest `
     -OperationName "Microsoft Graph service principal app role assignments request" `
@@ -67,15 +75,28 @@ function Get-GraphDependencies {
   }
 
   return [pscustomobject]@{
-    owners = @($owners | ForEach-Object {
-      [pscustomobject]@{
-        objectId = [string]$_.id
-        displayName = [string]$_.displayName
-        userPrincipalName = [string]$_.userPrincipalName
-        mail = [string]$_.mail
-        objectType = [string](Get-ObjectProperty -Object $_ -PropertyName "@odata.type")
+    owners = @(
+      $owners | ForEach-Object {
+        [pscustomobject]@{
+          objectId = [string]$_.id
+          displayName = [string]$_.displayName
+          userPrincipalName = [string]$_.userPrincipalName
+          mail = [string]$_.mail
+          objectType = [string](Get-ObjectProperty -Object $_ -PropertyName "@odata.type")
+          ownerSource = "ServicePrincipal"
+        }
       }
-    })
+      $applicationOwners | ForEach-Object {
+        [pscustomobject]@{
+          objectId = [string]$_.id
+          displayName = [string]$_.displayName
+          userPrincipalName = [string]$_.userPrincipalName
+          mail = [string]$_.mail
+          objectType = [string](Get-ObjectProperty -Object $_ -PropertyName "@odata.type")
+          ownerSource = "Application"
+        }
+      }
+    )
     appRoleAssignments = @($appRoleAssignments | ForEach-Object {
       [pscustomobject]@{
         id = [string]$_.id

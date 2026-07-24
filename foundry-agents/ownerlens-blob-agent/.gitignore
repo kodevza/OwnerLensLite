@@ -1,0 +1,4 @@
+.env
+.venv-foundry-agent/
+__pycache__/
+*.pyc

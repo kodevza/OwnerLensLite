@@ -62,8 +62,25 @@ function Resolve-EnterpriseApplication {
   }
 
   $sp = $uniqueMatches[0]
+  $applicationObjectId = $null
+  if (-not [string]::IsNullOrWhiteSpace([string]$sp.appId)) {
+    try {
+      $appIdLiteral = ConvertTo-ODataStringLiteral -Value ([string]$sp.appId)
+      $applicationMatches = @(Invoke-GraphPagedRequest `
+        -OperationName "Microsoft Graph application object lookup" `
+        -Uri "/v1.0/applications?`$filter=appId eq '$appIdLiteral'&`$select=id,appId,displayName&`$top=2")
+
+      if ($applicationMatches.Count -eq 1) {
+        $applicationObjectId = [string]$applicationMatches[0].id
+      }
+    } catch {
+      $applicationObjectId = $null
+    }
+  }
+
   return [pscustomobject]@{
     objectId = [string]$sp.id
+    applicationObjectId = $applicationObjectId
     appId = [string]$sp.appId
     displayName = [string]$sp.displayName
     appDisplayName = [string]$sp.appDisplayName

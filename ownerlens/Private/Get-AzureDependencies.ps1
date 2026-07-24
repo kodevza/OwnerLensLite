@@ -149,6 +149,125 @@ function Test-ActivityLogMatchesServicePrincipal {
   return $false
 }
 
+function Test-AzureActivityLogMatchesScope {
+  param(
+    [object]$Log,
+    [string]$Scope
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Scope)) {
+    return $false
+  }
+
+  $normalizedScope = ([string]$Scope).TrimEnd("/")
+  $candidateScopes = @(
+    [string]$Log.authorizationScope,
+    [string]$Log.resourceId
+  ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+  foreach ($candidateScope in $candidateScopes) {
+    $normalizedCandidateScope = ([string]$candidateScope).TrimEnd("/")
+    if ($normalizedCandidateScope.Equals($normalizedScope, [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $true
+    }
+
+    if ($normalizedCandidateScope.StartsWith("$normalizedScope/", [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function New-AzureRbacScopeActivityEvidence {
+  param(
+    [object]$Subscription,
+    [object]$Log,
+    [object]$RoleAssignment,
+    [object]$ServicePrincipal
+  )
+
+  [pscustomobject]@{
+    subscriptionId = [string]$Subscription.Id
+    subscriptionName = [string]$Subscription.Name
+    rbacScope = [string]$RoleAssignment.Scope
+    rbacRoleDefinitionName = [string]$RoleAssignment.RoleDefinitionName
+    eventTimestamp = [string]$Log.eventTimestamp
+    caller = [string]$Log.caller
+    callerObjectId = [string]$Log.callerObjectId
+    callerAppId = [string]$Log.callerAppId
+    callerName = [string]$Log.callerName
+    callerTenantId = [string]$Log.callerTenantId
+    operationName = [string]$Log.operationName
+    operationNameValue = [string]$Log.operationNameValue
+    status = [string]$Log.status
+    resourceGroupName = [string]$Log.resourceGroupName
+    resourceId = [string]$Log.resourceId
+    resourceType = [string]$Log.resourceType
+    authorizationAction = [string]$Log.authorizationAction
+    authorizationScope = [string]$Log.authorizationScope
+    matchesInspectedServicePrincipal = [bool](Test-ActivityLogMatchesServicePrincipal -Log $Log -ServicePrincipal $ServicePrincipal)
+    evidenceConfidence = "low"
+    evidenceReason = "Activity logs show recent management-plane operations under an RBAC scope assigned to the inspected service principal; this is access context, not ownership proof."
+  }
+}
+
+function Get-AzureRbacScopeActivityCallers {
+  param(
+    [object[]]$ActivityEvidence
+  )
+
+  $groups = @($ActivityEvidence) | Group-Object -Property {
+    $callerObjectId = [string]$_.callerObjectId
+    $callerAppId = [string]$_.callerAppId
+    $caller = [string]$_.caller
+    $callerName = [string]$_.callerName
+
+    if (-not [string]::IsNullOrWhiteSpace($callerObjectId)) {
+      return "object:$callerObjectId"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($callerAppId)) {
+      return "app:$callerAppId"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($caller)) {
+      return "caller:$caller"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($callerName)) {
+      return "name:$callerName"
+    }
+
+    return "unknown"
+  }
+
+  foreach ($group in $groups) {
+    $items = @($group.Group | Sort-Object eventTimestamp)
+    $first = $items | Select-Object -First 1
+    $last = $items | Select-Object -Last 1
+
+    [pscustomobject]@{
+      callerKey = [string]$group.Name
+      caller = [string]$last.caller
+      callerObjectId = [string]$last.callerObjectId
+      callerAppId = [string]$last.callerAppId
+      callerName = [string]$last.callerName
+      callerTenantId = [string]$last.callerTenantId
+      eventCount = [int]$items.Count
+      firstSeen = [string]$first.eventTimestamp
+      lastSeen = [string]$last.eventTimestamp
+      subscriptions = @($items | Select-Object -ExpandProperty subscriptionName -Unique)
+      rbacScopes = @($items | Select-Object -ExpandProperty rbacScope -Unique)
+      resourceIds = @($items | Select-Object -ExpandProperty resourceId -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      operationNames = @($items | Select-Object -ExpandProperty operationNameValue -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      matchesInspectedServicePrincipal = [bool](@($items | Where-Object matchesInspectedServicePrincipal).Count -gt 0)
+      evidenceConfidence = "low"
+      evidenceReason = "Caller performed recent management-plane operations under one or more RBAC scopes assigned to the inspected service principal."
+    }
+  }
+}
+
 function Get-AzureDependencies {
   [CmdletBinding()]
   param(
@@ -162,6 +281,13 @@ function Get-AzureDependencies {
 
     [ValidateRange(1, 1000000)]
     [int]$MaxActivityRecords = 5000,
+
+    [string]$LogAnalyticsWorkspaceId = "",
+
+    [ValidateRange(1, 1000000)]
+    [int]$MaxBlobReadRecords = 5000,
+
+    [string[]]$BlobReadOperationNames = @("GetBlob", "PutBlob", "PutBlock", "PutBlockList", "AppendBlock", "CopyBlob"),
 
     [switch]$SkipActivityLogs
   )
@@ -182,10 +308,16 @@ function Get-AzureDependencies {
   }
 
   $roleAssignments = @()
+  $coAssignedRoleCandidates = @()
   $resourceDependencies = @()
   $activityEvidence = @()
+  $rbacScopeActivityEvidence = @()
+  $blobReadEvidence = @()
+  $storageAccountsWithRbac = @{}
   $activityStartTime = (Get-Date).AddDays(-$ActivityDays)
   $servicePrincipalObjectId = [string]$ServicePrincipal.objectId
+  $candidateRoleAssignmentIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  $queriedCoAssignedScopes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
   foreach ($subscription in $selectedSubscriptions) {
     Set-AzContext -SubscriptionId $subscription.Id | Out-Null
@@ -227,6 +359,54 @@ function Get-AzureDependencies {
         -ResourceById $resourceById `
         -ResourceGroupByName $resourceGroupByName `
         -Subscription $subscription
+
+      foreach ($storageAccount in @(Get-AzureStorageAccountsForScope -Scope ([string]$assignment.Scope) -Resources $resources)) {
+        $storageAccountResourceId = [string]$storageAccount.ResourceId
+        if (-not [string]::IsNullOrWhiteSpace($storageAccountResourceId)) {
+          $storageAccountsWithRbac[$storageAccountResourceId] = $storageAccount
+        }
+      }
+
+      $assignmentScope = [string]$assignment.Scope
+      if (-not $queriedCoAssignedScopes.Add($assignmentScope)) {
+        continue
+      }
+
+      $sameScopeAssignments = @(Get-AzRoleAssignment -Scope $assignmentScope -ErrorAction SilentlyContinue)
+      foreach ($sameScopeAssignment in $sameScopeAssignments) {
+        if (-not ([string]$sameScopeAssignment.Scope).Equals([string]$assignment.Scope, [System.StringComparison]::OrdinalIgnoreCase)) {
+          continue
+        }
+
+        $candidatePrincipalId = [string]$sameScopeAssignment.ObjectId
+        if ([string]::IsNullOrWhiteSpace($candidatePrincipalId)) {
+          continue
+        }
+
+        if ($candidatePrincipalId.Equals($servicePrincipalObjectId, [System.StringComparison]::OrdinalIgnoreCase)) {
+          continue
+        }
+
+        $candidateRoleAssignmentId = [string]$sameScopeAssignment.RoleAssignmentId
+        if (-not [string]::IsNullOrWhiteSpace($candidateRoleAssignmentId)) {
+          if (-not $candidateRoleAssignmentIds.Add($candidateRoleAssignmentId)) {
+            continue
+          }
+        }
+
+        $coAssignedRoleCandidates += [pscustomobject]@{
+          subscriptionId = [string]$subscription.Id
+          subscriptionName = [string]$subscription.Name
+          roleAssignmentId = $candidateRoleAssignmentId
+          scope = [string]$sameScopeAssignment.Scope
+          principalId = $candidatePrincipalId
+          principalType = [string]$sameScopeAssignment.ObjectType
+          principalName = [string]$sameScopeAssignment.SignInName
+          principalDisplayName = [string]$sameScopeAssignment.DisplayName
+          roleDefinitionId = [string]$sameScopeAssignment.RoleDefinitionId
+          roleDefinitionName = [string]$sameScopeAssignment.RoleDefinitionName
+        }
+      }
     }
 
     if (-not $SkipActivityLogs) {
@@ -236,6 +416,16 @@ function Get-AzureDependencies {
         -MaxRecord $MaxActivityRecords
 
       foreach ($log in @($logs)) {
+        foreach ($assignment in $assignments) {
+          if (Test-AzureActivityLogMatchesScope -Log $log -Scope ([string]$assignment.Scope)) {
+            $rbacScopeActivityEvidence += New-AzureRbacScopeActivityEvidence `
+              -Subscription $subscription `
+              -Log $log `
+              -RoleAssignment $assignment `
+              -ServicePrincipal $ServicePrincipal
+          }
+        }
+
         if (Test-ActivityLogMatchesServicePrincipal -Log $log -ServicePrincipal $ServicePrincipal) {
           $activityEvidence += [pscustomobject]@{
             subscriptionId = [string]$subscription.Id
@@ -261,6 +451,16 @@ function Get-AzureDependencies {
     }
   }
 
+  if (-not [string]::IsNullOrWhiteSpace($LogAnalyticsWorkspaceId)) {
+    $blobReadEvidence = @(Get-StorageBlobReadLogs `
+        -WorkspaceId $LogAnalyticsWorkspaceId `
+        -StorageAccounts @($storageAccountsWithRbac.Values) `
+        -ServicePrincipal $ServicePrincipal `
+        -StartTime $activityStartTime `
+        -MaxRecord $MaxBlobReadRecords `
+        -BlobReadOperationNames $BlobReadOperationNames)
+  }
+
   return [pscustomobject]@{
     requestedSubscriptions = @($subscriptionFilters)
     subscriptions = @($selectedSubscriptions | ForEach-Object {
@@ -271,10 +471,27 @@ function Get-AzureDependencies {
       }
     })
     roleAssignments = @($roleAssignments | Sort-Object subscriptionName, scope, roleDefinitionName)
+    coAssignedRoleCandidates = @($coAssignedRoleCandidates | Sort-Object subscriptionName, scope, principalDisplayName, roleDefinitionName)
     resourceDependencies = @($resourceDependencies |
       Sort-Object resourceId -Unique |
       Sort-Object dependencyType, resourceGroup, resourceName)
     activityEvidence = @($activityEvidence | Sort-Object eventTimestamp, resourceId)
+    rbacScopeActivityEvidence = @($rbacScopeActivityEvidence | Sort-Object eventTimestamp, rbacScope, resourceId)
+    rbacScopeActivityCallers = @(Get-AzureRbacScopeActivityCallers -ActivityEvidence @($rbacScopeActivityEvidence) |
+      Sort-Object @{ Expression = "eventCount"; Descending = $true }, lastSeen)
+    blobReadEvidence = @($blobReadEvidence | Sort-Object eventTimestamp, storageAccountName, uri)
+    blobReadCallers = @(Get-StorageBlobReadCallers -BlobReadEvidence @($blobReadEvidence) |
+      Sort-Object @{ Expression = "blobAccessCount"; Descending = $true }, lastSeen)
+    storageAccountsWithRbac = @($storageAccountsWithRbac.Values | ForEach-Object {
+      [pscustomobject]@{
+        resourceId = [string]$_.ResourceId
+        name = [string]$_.Name
+        resourceGroup = [string]$_.ResourceGroupName
+        location = [string]$_.Location
+      }
+    } | Sort-Object name)
+    logAnalyticsWorkspaceId = [string]$LogAnalyticsWorkspaceId
+    maxBlobReadRecords = $MaxBlobReadRecords
     activityStartTime = $activityStartTime.ToUniversalTime().ToString("o")
     maxActivityRecords = $MaxActivityRecords
     activitySkipped = [bool]$SkipActivityLogs

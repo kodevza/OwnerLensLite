@@ -21,6 +21,10 @@ function Format-DependencyReport {
   Write-Host "Azure role assignments: $($Report.summary.azureRoleAssignments)"
   Write-Host "Azure dependency scopes: $($Report.summary.azureDependencyScopes)"
   Write-Host "Recent Azure activity records: $($Report.summary.azureActivityRecords)"
+  Write-Host "Recent Azure RBAC scope activity callers: $($Report.summary.azureRbacScopeActivityCallers)"
+  Write-Host "Storage accounts with RBAC: $($Report.summary.azureStorageAccountsWithRbac)"
+  Write-Host "Recent blob data-plane participants: $($Report.summary.azureBlobReadCallers)"
+  Write-Host "Recent blob data-plane records: $($Report.summary.azureBlobReadRecords)"
   Write-Host "Graph app role assignments: $($Report.summary.graphAppRoleAssignments)"
   Write-Host "Graph delegated permission grants: $($Report.summary.graphDelegatedPermissionGrants)"
   Write-Host "Graph group memberships: $($Report.summary.graphGroupMemberships)"
@@ -48,6 +52,46 @@ function Format-DependencyReport {
     Write-Host "------------------------------"
     $Report.azure.activityEvidence |
       Select-Object eventTimestamp, subscriptionName, operationNameValue, resourceId, status |
+      Format-Table -AutoSize
+  }
+
+  if ($Report.azure.rbacScopeActivityCallers.Count -gt 0) {
+    Write-Host "Recent Azure RBAC Scope Activity Callers"
+    Write-Host "----------------------------------------"
+    $Report.azure.rbacScopeActivityCallers |
+      Select-Object callerName, caller, callerObjectId, callerAppId, eventCount, firstSeen, lastSeen, matchesInspectedServicePrincipal |
+      Format-Table -AutoSize
+  }
+
+  if ($Report.azure.rbacScopeActivityEvidence.Count -gt 0) {
+    Write-Host "Recent Azure RBAC Scope Activity Evidence"
+    Write-Host "-----------------------------------------"
+    $Report.azure.rbacScopeActivityEvidence |
+      Select-Object eventTimestamp, callerName, caller, operationNameValue, resourceId, rbacScope, status |
+      Format-Table -AutoSize
+  }
+
+  if ($Report.azure.storageAccountsWithRbac.Count -gt 0) {
+    Write-Host "Storage Accounts Under Azure RBAC Scopes"
+    Write-Host "----------------------------------------"
+    $Report.azure.storageAccountsWithRbac |
+      Select-Object name, resourceGroup, location, resourceId |
+      Format-Table -AutoSize
+  }
+
+  if ($Report.azure.blobReadCallers.Count -gt 0) {
+    Write-Host "Recent Blob Data-Plane Participants"
+    Write-Host "-----------------------------------"
+    $Report.azure.blobReadCallers |
+      Select-Object requesterUpn, requesterObjectId, requesterAppId, requesterType, authenticationType, blobReadCount, blobPublishCount, blobAccessCount, firstSeen, lastSeen, matchesInspectedServicePrincipal |
+      Format-Table -AutoSize
+  }
+
+  if ($Report.azure.blobReadEvidence.Count -gt 0) {
+    Write-Host "Recent Blob Data-Plane Evidence"
+    Write-Host "-------------------------------"
+    $Report.azure.blobReadEvidence |
+      Select-Object eventTimestamp, storageAccountName, accessDirection, requesterUpn, requesterObjectId, requesterAppId, requesterType, operationName, statusText, uri |
       Format-Table -AutoSize
   }
 

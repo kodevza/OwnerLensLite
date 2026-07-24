@@ -6,3 +6,4 @@
 output/
 reports/
 .env.github-secrets
+foundry-agents/ownerlens-blob-agent/.env
