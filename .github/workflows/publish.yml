@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Preview module version, for example 0.1.0-preview"
+        description: "Preview module version, for example 0.1.0-preview1"
         required: false
-        default: "0.1.0-preview"
+        default: "0.1.0-preview1"
   push:
     tags:
       - "v*"
@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install Pester
         shell: pwsh
@@ -41,6 +41,7 @@ jobs:
           Invoke-Pester ./tests -CI
 
       - name: Set preview module version
+        id: module_version
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -71,6 +72,13 @@ jobs:
             throw "Manifest prerelease '$($manifest.PrivateData.PSData.Prerelease)' does not match expected '$prerelease'."
           }
 
+          "module_version=$moduleVersion" >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
+
+      - name: Build package artifact
+        shell: pwsh
+        run: ./scripts/Build-OwnerLensLightModule.ps1
+
       - name: Validate Azure Artifact Signing configuration
         shell: pwsh
         run: |
@@ -97,7 +105,7 @@ jobs:
           endpoint: ${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}
           signing-account-name: ${{ secrets.ARTIFACT_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ secrets.ARTIFACT_SIGNING_CERTIFICATE_PROFILE_NAME }}
-          files-folder: ${{ github.workspace }}\OwnerLensLight
+          files-folder: ${{ github.workspace }}\artifacts\OwnerLensLight
           files-folder-filter: ps1,psm1,psd1
           files-folder-recurse: true
           file-digest: SHA256
@@ -107,12 +115,13 @@ jobs:
       - name: Validate signed module
         shell: pwsh
         run: |
-          $manifest = Test-ModuleManifest ./OwnerLensLight/OwnerLensLight.psd1
-          if ($manifest.PrivateData.PSData.Prerelease -ne "preview") {
-            throw "Module manifest must publish with prerelease label 'preview'."
+          $manifest = Test-ModuleManifest ./artifacts/OwnerLensLight/OwnerLensLight.psd1
+          $expectedPrerelease = "${{ steps.module_version.outputs.prerelease }}"
+          if ($manifest.PrivateData.PSData.Prerelease -ne $expectedPrerelease) {
+            throw "Module manifest must publish with prerelease label '$expectedPrerelease'."
           }
 
-          ./scripts/Test-OwnerLensLightSignatures.ps1 -Path ./OwnerLensLight -RequireValid -RequireTimestamp
+          ./scripts/Test-OwnerLensLightSignatures.ps1 -Path ./artifacts/OwnerLensLight -RequireValid -RequireTimestamp -OutputJson ./artifacts/OwnerLensLight-signatures.json
 
       - name: Publish preview to PowerShell Gallery
         shell: pwsh
@@ -123,8 +132,8 @@ jobs:
             throw "Missing PSGALLERY_API_KEY secret."
           }
 
-          Publish-Module `
-            -Path ./OwnerLensLight `
-            -Repository PSGallery `
-            -NuGetApiKey $env:PSGALLERY_API_KEY `
-            -Force
+          ./scripts/Publish-OwnerLensLightModule.ps1 `
+            -Path ./artifacts/OwnerLensLight `
+            -ApiKey $env:PSGALLERY_API_KEY `
+            -SkipBuild `
+            -RequireTimestamp

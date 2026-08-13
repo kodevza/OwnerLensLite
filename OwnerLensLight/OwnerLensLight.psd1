@@ -17,7 +17,7 @@
   PrivateData = @{
     Name = 'OwnerLens Light'
     PSData = @{
-      Prerelease = 'preview'
+      Prerelease = 'preview1'
       Tags = @('OwnerLens', 'Azure', 'Entra', 'EnterpriseApplication', 'ServicePrincipal', 'Preview')
       LicenseUri = 'https://www.apache.org/licenses/LICENSE-2.0'
       ProjectUri = 'https://github.com/kodevza/ownerlens-light'
