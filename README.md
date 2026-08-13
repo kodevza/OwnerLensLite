@@ -116,7 +116,7 @@ Invoke-Pester ./tests
 
 ## Publishing
 
-The GitHub Actions workflow uses the same signing model as the main OwnerLens package pipeline: Azure OIDC login plus Azure Artifact Signing. It signs all module `.ps1`, `.psm1`, and `.psd1` files, verifies Authenticode signatures and timestamps, then publishes the module to PowerShell Gallery as `OwnerLensLight` with prerelease label `preview`.
+The GitHub Actions workflow uses the same signing model as the main OwnerLens package pipeline: Azure OIDC login plus Azure Artifact Signing. It signs all module `.ps1`, `.psm1`, and `.psd1` files, verifies Authenticode signatures and timestamps, then publishes the module to PowerShell Gallery as `OwnerLensLight` with prerelease label `preview1`.
 
 Required repository secrets:
 
@@ -135,3 +135,9 @@ Configure them from local environment variables or a local `.env.github-secrets`
 ```
 
 The dotenv file should use `NAME=value` lines. It is ignored by git.
+
+The Azure app registration used by `AZURE_CLIENT_ID` must also have a federated identity credential for the `package-signing` GitHub environment. Current GitHub OIDC subject:
+
+```text
+repo:kodevza@5245845/ownerlens-light@1309708418:environment:package-signing
+```
