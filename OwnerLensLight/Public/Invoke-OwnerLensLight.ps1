@@ -15,6 +15,11 @@ function Invoke-OwnerLensLight {
     [ValidateRange(1, 1000000)]
     [int]$MaxActivityRecords = 5000,
 
+    [string]$SignInUser = "",
+
+    [ValidateRange(1, 1000000)]
+    [int]$MaxUserSignInRecords = 5000,
+
     [string]$LogAnalyticsWorkspaceId = "",
 
     [ValidateRange(1, 1000000)]
@@ -29,7 +34,7 @@ function Invoke-OwnerLensLight {
 
     [string[]]$GroupOwnerTagNames = @("groupOwner", "ownerGroup", "teamOwner", "team"),
 
-    [string[]]$TagOwnerTagNames = @("owner", "serviceOwner", "costCenter", "costCentre", "cost-center", "cost_center"),
+    [string[]]$TagOwnerTagNames = @("owner", "serviceOwner", "appOwner", "applicationOwner", "productOwner", "ownedBy", "costCenter", "costCentre", "cost-center", "cost_center"),
 
     [string]$OutputPath = "",
 
@@ -49,13 +54,17 @@ function Invoke-OwnerLensLight {
       param([string]$Message)
 
       $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-      Write-Host "[$timestamp] $Message"
+      Write-Verbose "[$timestamp] $Message"
     }
 
     try {
       Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
     } catch {
       throw "Microsoft Graph PowerShell module missing: Microsoft.Graph.Authentication. Install: Install-Module Microsoft.Graph -Scope CurrentUser"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($SignInUser) -and @($Scopes) -notcontains "AuditLog.Read.All") {
+      $Scopes = @($Scopes) + "AuditLog.Read.All"
     }
 
     if (-not (Get-Command Get-AzContext -ErrorAction SilentlyContinue)) {
@@ -91,7 +100,12 @@ function Invoke-OwnerLensLight {
     Write-ProgressLine "Resolved $($servicePrincipal.displayName) (objectId=$($servicePrincipal.objectId), appId=$($servicePrincipal.appId))"
 
     Write-ProgressLine "Loading Microsoft Graph dependency evidence"
-    $graphDependencies = Get-GraphDependencies -ServicePrincipal $servicePrincipal
+    $activityStartTime = (Get-Date).AddDays(-$ActivityDays)
+    $graphDependencies = Get-GraphDependencies `
+      -ServicePrincipal $servicePrincipal `
+      -SignInUser $SignInUser `
+      -SignInStartTime $activityStartTime `
+      -MaxUserSignInRecords $MaxUserSignInRecords
 
     Write-ProgressLine "Loading Azure RBAC/resource/activity dependency evidence"
     $azureDependencies = Get-AzureDependencies `
@@ -111,6 +125,8 @@ function Invoke-OwnerLensLight {
         activityDays = $ActivityDays
         activityStartTime = $azureDependencies.activityStartTime
         maxActivityRecords = $MaxActivityRecords
+        signInUser = $SignInUser
+        maxUserSignInRecords = $MaxUserSignInRecords
         logAnalyticsWorkspaceId = $azureDependencies.logAnalyticsWorkspaceId
         maxBlobReadRecords = $azureDependencies.maxBlobReadRecords
         blobReadOperationNames = @($BlobReadOperationNames)
@@ -130,13 +146,19 @@ function Invoke-OwnerLensLight {
         azureActivityRecords = @($azureDependencies.activityEvidence).Count
         azureRbacScopeActivityRecords = @($azureDependencies.rbacScopeActivityEvidence).Count
         azureRbacScopeActivityCallers = @($azureDependencies.rbacScopeActivityCallers).Count
+        azureActivityLogDiagnosticSettings = @($azureDependencies.activityDiagnosticSettings | Where-Object activityLogEnabled).Count
+        azureActivityLogAnalyticsDiagnostics = @($azureDependencies.activityDiagnosticSettings | Where-Object logAnalyticsEnabled).Count
         azureStorageAccountsWithRbac = @($azureDependencies.storageAccountsWithRbac).Count
+        azureStorageAccountsWithDiagnosticLogs = @($azureDependencies.storageAccountsWithRbac | Where-Object diagnosticLogEnabled).Count
+        azureStorageAccountsWithLogAnalyticsDiagnostics = @($azureDependencies.storageAccountsWithRbac | Where-Object diagnosticLogAnalyticsEnabled).Count
         azureBlobReadRecords = @($azureDependencies.blobReadEvidence).Count
         azureBlobReadCallers = @($azureDependencies.blobReadCallers).Count
+        azureBlobReadObjects = @($azureDependencies.blobReadObjects).Count
         graphAppRoleAssignments = @($graphDependencies.appRoleAssignments).Count
         graphDelegatedPermissionGrants = @($graphDependencies.oauth2PermissionGrants).Count
         graphGroupMemberships = @($graphDependencies.memberOf).Count
         graphResourceServicePrincipals = @($graphDependencies.resourceServicePrincipals).Count
+        graphUserSignIns = @($graphDependencies.userSignIns).Count
         owners = @($graphDependencies.owners).Count
       }
       azure = [pscustomobject]@{
@@ -147,16 +169,21 @@ function Invoke-OwnerLensLight {
         activityEvidence = @($azureDependencies.activityEvidence)
         rbacScopeActivityEvidence = @($azureDependencies.rbacScopeActivityEvidence)
         rbacScopeActivityCallers = @($azureDependencies.rbacScopeActivityCallers)
+        activityDiagnosticSettings = @($azureDependencies.activityDiagnosticSettings)
         storageAccountsWithRbac = @($azureDependencies.storageAccountsWithRbac)
         blobReadEvidence = @($azureDependencies.blobReadEvidence)
         blobReadCallers = @($azureDependencies.blobReadCallers)
+        blobReadObjects = @($azureDependencies.blobReadObjects)
       }
       graph = $graphDependencies
       notes = @(
         "Azure RBAC scopes show where the Enterprise Application service principal has assigned access.",
         "Azure Monitor activity evidence is low-confidence usage evidence from the selected activity window; it is not proof of ownership.",
         "Azure RBAC scope activity callers show recent management-plane activity under scopes where the Enterprise Application service principal has RBAC; data-plane access requires resource diagnostic logs.",
+        "Storage account sections include only accounts where the Enterprise Application service principal has Storage Blob/Table/Queue data-plane read access, not accounts visible only through management-plane metadata access.",
+        "Storage diagnostic status is checked on the Blob/Table/Queue service resources covered by the assigned data-plane RBAC roles.",
         "Azure blob data-plane evidence is available only when -LogAnalyticsWorkspaceId points to a workspace that receives StorageBlobLogs from the relevant storage accounts.",
+        "Microsoft Graph user sign-ins are loaded only when -SignInUser is provided and require AuditLog.Read.All plus tenant sign-in log retention for the selected ActivityDays window.",
         "Microsoft Graph app role assignments and delegated permission grants show API dependencies."
       )
     }
@@ -186,7 +213,7 @@ function Invoke-OwnerLensLight {
       return (Format-OwnerCandidateTable -Candidates @($report.ownerCandidates))
     }
 
-    Format-DependencyReport -Report $report
+    Format-DependencyReport -Report $report -Full:($VerbosePreference -eq "Continue")
     return $report
   }
 }

@@ -62,6 +62,17 @@ Include blob data-plane evidence from a Log Analytics workspace that receives St
 
 The blob data-plane section reports storage accounts under the Enterprise Application's RBAC scopes, recent read/publish operations, and participants grouped by object ID, app ID, and UPN together when Azure logs them together. This matters for agent-style flows where communication can be bidirectional: a user may publish blobs to the agent while a service principal reads them, or the service principal may publish data that users read later. The signed-in Azure identity must be able to query the Log Analytics workspace, and the relevant Storage Accounts must have diagnostic settings sending blob logs to that workspace.
 
+Include Microsoft Entra sign-in logs for one user in the selected `-ActivityDays` window:
+
+```powershell
+./Invoke-OwnerLensLight.ps1 `
+  -EnterpriseApplication "<app-id>" `
+  -SignInUser "user@example.com" `
+  -ActivityDays 30
+```
+
+`-SignInUser` accepts a user object ID or UPN. It queries Microsoft Graph `auditLogs/signIns`, requires `AuditLog.Read.All`, and is limited by the tenant's sign-in log retention.
+
 Configure blob read/write diagnostic logs for storage accounts:
 
 ```powershell

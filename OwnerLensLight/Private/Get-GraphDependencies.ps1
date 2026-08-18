@@ -2,7 +2,14 @@ function Get-GraphDependencies {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory = $true)]
-    [object]$ServicePrincipal
+    [object]$ServicePrincipal,
+
+    [string]$SignInUser = "",
+
+    [datetime]$SignInStartTime = (Get-Date).AddDays(-30),
+
+    [ValidateRange(1, 1000000)]
+    [int]$MaxUserSignInRecords = 5000
   )
 
   $servicePrincipalId = [string]$ServicePrincipal.objectId
@@ -74,6 +81,20 @@ function Get-GraphDependencies {
     }
   }
 
+  $userSignIns = @()
+  if (-not [string]::IsNullOrWhiteSpace($SignInUser)) {
+    $escapedSignInUser = ([string]$SignInUser).Replace("'", "''")
+    $signInStartTimeText = $SignInStartTime.ToUniversalTime().ToString("o")
+    $userFilterProperty = if ($SignInUser -match "@") { "userPrincipalName" } else { "userId" }
+    $signInFilter = "createdDateTime ge $signInStartTimeText and $userFilterProperty eq '$escapedSignInUser'"
+    $encodedSignInFilter = [System.Uri]::EscapeDataString($signInFilter)
+    $userSignIns = @(Invoke-GraphPagedRequest `
+        -OperationName "Microsoft Graph user sign-ins request" `
+        -Uri "/v1.0/auditLogs/signIns?`$filter=$encodedSignInFilter&`$top=999")
+
+    $userSignIns = @($userSignIns | Select-Object -First $MaxUserSignInRecords)
+  }
+
   return [pscustomobject]@{
     owners = @(
       $owners | ForEach-Object {
@@ -127,5 +148,27 @@ function Get-GraphDependencies {
       }
     })
     resourceServicePrincipals = @($resourcePrincipals | Sort-Object displayName, objectId)
+    userSignIns = @($userSignIns | ForEach-Object {
+      [pscustomobject]@{
+        id = [string]$_.id
+        createdDateTime = [string]$_.createdDateTime
+        userId = [string]$_.userId
+        userPrincipalName = [string]$_.userPrincipalName
+        userDisplayName = [string]$_.userDisplayName
+        appId = [string]$_.appId
+        appDisplayName = [string]$_.appDisplayName
+        ipAddress = [string]$_.ipAddress
+        locationCity = [string](Get-ObjectProperty -Object $_.location -PropertyName "city")
+        locationState = [string](Get-ObjectProperty -Object $_.location -PropertyName "state")
+        locationCountryOrRegion = [string](Get-ObjectProperty -Object $_.location -PropertyName "countryOrRegion")
+        clientAppUsed = [string]$_.clientAppUsed
+        conditionalAccessStatus = [string]$_.conditionalAccessStatus
+        statusErrorCode = [string](Get-ObjectProperty -Object $_.status -PropertyName "errorCode")
+        statusFailureReason = [string](Get-ObjectProperty -Object $_.status -PropertyName "failureReason")
+        resourceDisplayName = [string]$_.resourceDisplayName
+        resourceId = [string]$_.resourceId
+        correlationId = [string]$_.correlationId
+      }
+    } | Sort-Object createdDateTime -Descending)
   }
 }

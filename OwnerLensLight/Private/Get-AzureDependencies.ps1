@@ -268,6 +268,267 @@ function Get-AzureRbacScopeActivityCallers {
   }
 }
 
+function Get-AzureStorageDataReadServices {
+  param([string]$RoleDefinitionName)
+
+  switch -Regex ([string]$RoleDefinitionName) {
+    "^Storage Blob Data (Reader|Contributor|Owner)$" { return @("Blob") }
+    "^Storage Table Data (Reader|Contributor)$" { return @("Table") }
+    "^Storage Queue Data (Reader|Contributor|Message Processor)$" { return @("Queue") }
+    default { return @() }
+  }
+}
+
+function Test-AzureStorageDataReadRole {
+  param([string]$RoleDefinitionName)
+
+  return @((Get-AzureStorageDataReadServices -RoleDefinitionName $RoleDefinitionName)).Count -gt 0
+}
+
+function Get-AzureStorageDiagnosticServiceResourceId {
+  param(
+    [string]$StorageAccountResourceId,
+    [string]$Service
+  )
+
+  if ([string]::IsNullOrWhiteSpace($StorageAccountResourceId)) {
+    return ""
+  }
+
+  switch ([string]$Service) {
+    "Blob" { return "$($StorageAccountResourceId.TrimEnd("/"))/blobServices/default" }
+    "Table" { return "$($StorageAccountResourceId.TrimEnd("/"))/tableServices/default" }
+    "Queue" { return "$($StorageAccountResourceId.TrimEnd("/"))/queueServices/default" }
+    default { return [string]$StorageAccountResourceId }
+  }
+}
+
+function Test-AzureStorageDiagnosticLogEnabled {
+  param(
+    [object]$DiagnosticSetting,
+    [string[]]$DataAccessCategories = @("StorageRead", "StorageWrite", "StorageDelete")
+  )
+
+  $normalizedDataAccessCategories = @($DataAccessCategories | ForEach-Object {
+      ([string]$_) -replace "[^A-Za-z0-9]", ""
+    })
+
+  $logs = @(
+    Get-ObjectProperty -Object $DiagnosticSetting -PropertyName "Logs"
+    Get-ObjectProperty -Object $DiagnosticSetting -PropertyName "Log"
+    Get-ObjectProperty -Object $DiagnosticSetting -PropertyName "EnabledLog"
+  )
+
+  foreach ($log in $logs) {
+    $enabled = [bool](Get-ObjectProperty -Object $log -PropertyName "Enabled")
+    if (-not $enabled) {
+      continue
+    }
+
+    $category = [string](Get-ObjectProperty -Object $log -PropertyName "Category")
+    $categoryGroup = [string](Get-ObjectProperty -Object $log -PropertyName "CategoryGroup")
+    $normalizedCategory = $category -replace "[^A-Za-z0-9]", ""
+    if (
+      $DataAccessCategories -contains $category -or
+      $normalizedDataAccessCategories -contains $normalizedCategory -or
+      $categoryGroup.Equals("allLogs", [System.StringComparison]::OrdinalIgnoreCase) -or
+      $categoryGroup.Equals("audit", [System.StringComparison]::OrdinalIgnoreCase)
+    ) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function Get-AzureStorageDiagnosticSummary {
+  param(
+    [object]$StorageAccount,
+    [string[]]$DataPlaneReadServices
+  )
+
+  $storageAccountResourceId = [string]$StorageAccount.ResourceId
+  $services = @($DataPlaneReadServices | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+  $serviceRows = @()
+
+  foreach ($service in $services) {
+    $serviceResourceId = Get-AzureStorageDiagnosticServiceResourceId `
+      -StorageAccountResourceId $storageAccountResourceId `
+      -Service $service
+
+    try {
+      $settings = @(Get-AzDiagnosticSetting -ResourceId $serviceResourceId -ErrorAction Stop)
+      $enabledSettings = @($settings | Where-Object {
+          Test-AzureStorageDiagnosticLogEnabled -DiagnosticSetting $_
+        })
+      $logAnalyticsSettings = @($enabledSettings | Where-Object {
+          -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId"))
+        })
+      $externalSettings = @($enabledSettings | Where-Object {
+          -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "StorageAccountId")) -or
+          -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "EventHubAuthorizationRuleId")) -or
+          -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "MarketplacePartnerId"))
+        })
+
+      $serviceRows += [pscustomobject]@{
+        service = [string]$service
+        resourceId = $serviceResourceId
+        status = if ($logAnalyticsSettings.Count -gt 0) {
+          "LogAnalytics"
+        } elseif ($externalSettings.Count -gt 0) {
+          "ExternalDestination"
+        } elseif ($enabledSettings.Count -gt 0) {
+          "EnabledNoDestinationDetected"
+        } else {
+          "NotConfigured"
+        }
+        dataAccessLogEnabled = [bool]($enabledSettings.Count -gt 0)
+        logAnalyticsEnabled = [bool]($logAnalyticsSettings.Count -gt 0)
+        diagnosticSettingNames = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "Name") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        workspaceIds = @($logAnalyticsSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      }
+    } catch {
+      $serviceRows += [pscustomobject]@{
+        service = [string]$service
+        resourceId = $serviceResourceId
+        status = "ReadFailed"
+        dataAccessLogEnabled = $false
+        logAnalyticsEnabled = $false
+        diagnosticSettingNames = @()
+        workspaceIds = @()
+        error = [string]$_.Exception.Message
+      }
+    }
+  }
+
+  $logAnalyticsCount = @($serviceRows | Where-Object logAnalyticsEnabled).Count
+  $loggedCount = @($serviceRows | Where-Object dataAccessLogEnabled).Count
+  $failedCount = @($serviceRows | Where-Object status -eq "ReadFailed").Count
+
+  [pscustomobject]@{
+    services = @($serviceRows)
+    diagnosticLogEnabled = [bool]($loggedCount -gt 0)
+    diagnosticLogAnalyticsEnabled = [bool]($logAnalyticsCount -gt 0)
+    dataAccessVerificationStatus = if ($services.Count -eq 0) {
+      "NoDataPlaneService"
+    } elseif ($logAnalyticsCount -eq $services.Count) {
+      "QueryableInLogAnalytics"
+    } elseif ($logAnalyticsCount -gt 0) {
+      "PartiallyQueryableInLogAnalytics"
+    } elseif ($loggedCount -gt 0) {
+      "ConfiguredOutsideLogAnalytics"
+    } elseif ($failedCount -gt 0) {
+      "DiagnosticSettingsReadFailed"
+    } else {
+      "NotConfigured"
+    }
+    dataAccessVerificationReason = if ($services.Count -eq 0) {
+      "No storage data-plane service was derived from the assigned RBAC roles."
+    } elseif ($logAnalyticsCount -eq $services.Count) {
+      "Data-plane diagnostic logs are enabled to Log Analytics for every storage service covered by the inspected RBAC roles."
+    } elseif ($logAnalyticsCount -gt 0) {
+      "Data-plane diagnostic logs are enabled to Log Analytics for only some storage services covered by the inspected RBAC roles."
+    } elseif ($loggedCount -gt 0) {
+      "Data-plane diagnostic logs are enabled, but no Log Analytics destination was detected; requester review may require the configured external destination."
+    } elseif ($failedCount -gt 0) {
+      "Diagnostic settings could not be read for one or more storage services."
+    } else {
+      "No data-plane diagnostic logs were detected, so historical requester verification is not available from Azure Storage resource logs."
+    }
+  }
+}
+
+function Test-AzureActivityDiagnosticLogEnabled {
+  param(
+    [object]$DiagnosticSetting
+  )
+
+  $logs = @(
+    Get-ObjectProperty -Object $DiagnosticSetting -PropertyName "Logs"
+    Get-ObjectProperty -Object $DiagnosticSetting -PropertyName "Log"
+    Get-ObjectProperty -Object $DiagnosticSetting -PropertyName "EnabledLog"
+  )
+
+  foreach ($log in $logs) {
+    $enabled = [bool](Get-ObjectProperty -Object $log -PropertyName "Enabled")
+    if (-not $enabled) {
+      continue
+    }
+
+    $category = [string](Get-ObjectProperty -Object $log -PropertyName "Category")
+    $categoryGroup = [string](Get-ObjectProperty -Object $log -PropertyName "CategoryGroup")
+    if (
+      -not [string]::IsNullOrWhiteSpace($category) -or
+      $categoryGroup.Equals("allLogs", [System.StringComparison]::OrdinalIgnoreCase) -or
+      $categoryGroup.Equals("audit", [System.StringComparison]::OrdinalIgnoreCase)
+    ) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function Get-AzureActivityDiagnosticSummary {
+  param(
+    [object]$Subscription
+  )
+
+  $subscriptionResourceId = "/subscriptions/$($Subscription.Id)"
+
+  try {
+    $settings = @(Get-AzDiagnosticSetting -ResourceId $subscriptionResourceId -ErrorAction Stop)
+    $enabledSettings = @($settings | Where-Object {
+        Test-AzureActivityDiagnosticLogEnabled -DiagnosticSetting $_
+      })
+    $logAnalyticsSettings = @($enabledSettings | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId"))
+      })
+    $externalSettings = @($enabledSettings | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "StorageAccountId")) -or
+        -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "EventHubAuthorizationRuleId")) -or
+        -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "MarketplacePartnerId"))
+      })
+
+    return [pscustomobject]@{
+      subscriptionId = [string]$Subscription.Id
+      subscriptionName = [string]$Subscription.Name
+      resourceId = $subscriptionResourceId
+      status = if ($logAnalyticsSettings.Count -gt 0) {
+        "LogAnalytics"
+      } elseif ($externalSettings.Count -gt 0) {
+        "ExternalDestination"
+      } elseif ($enabledSettings.Count -gt 0) {
+        "EnabledNoDestinationDetected"
+      } else {
+        "NotConfigured"
+      }
+      activityLogEnabled = [bool]($enabledSettings.Count -gt 0)
+      logAnalyticsEnabled = [bool]($logAnalyticsSettings.Count -gt 0)
+      diagnosticSettingNames = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "Name") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      workspaceIds = @($logAnalyticsSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      storageAccountIds = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "StorageAccountId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      eventHubAuthorizationRuleIds = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "EventHubAuthorizationRuleId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      marketplacePartnerIds = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "MarketplacePartnerId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+    }
+  } catch {
+    return [pscustomobject]@{
+      subscriptionId = [string]$Subscription.Id
+      subscriptionName = [string]$Subscription.Name
+      resourceId = $subscriptionResourceId
+      status = "ReadFailed"
+      activityLogEnabled = $false
+      logAnalyticsEnabled = $false
+      diagnosticSettingNames = @()
+      workspaceIds = @()
+      storageAccountIds = @()
+      eventHubAuthorizationRuleIds = @()
+      marketplacePartnerIds = @()
+      error = [string]$_.Exception.Message
+    }
+  }
+}
+
 function Get-AzureDependencies {
   [CmdletBinding()]
   param(
@@ -313,6 +574,7 @@ function Get-AzureDependencies {
   $activityEvidence = @()
   $rbacScopeActivityEvidence = @()
   $blobReadEvidence = @()
+  $activityDiagnosticSettings = @()
   $storageAccountsWithRbac = @{}
   $activityStartTime = (Get-Date).AddDays(-$ActivityDays)
   $servicePrincipalObjectId = [string]$ServicePrincipal.objectId
@@ -321,6 +583,7 @@ function Get-AzureDependencies {
 
   foreach ($subscription in $selectedSubscriptions) {
     Set-AzContext -SubscriptionId $subscription.Id | Out-Null
+    $activityDiagnosticSettings += Get-AzureActivityDiagnosticSummary -Subscription $subscription
 
     $resources = @(Get-AzResource)
     $resourceGroups = @(Get-AzResourceGroup)
@@ -360,10 +623,29 @@ function Get-AzureDependencies {
         -ResourceGroupByName $resourceGroupByName `
         -Subscription $subscription
 
-      foreach ($storageAccount in @(Get-AzureStorageAccountsForScope -Scope ([string]$assignment.Scope) -Resources $resources)) {
-        $storageAccountResourceId = [string]$storageAccount.ResourceId
-        if (-not [string]::IsNullOrWhiteSpace($storageAccountResourceId)) {
-          $storageAccountsWithRbac[$storageAccountResourceId] = $storageAccount
+      $dataReadServices = @(Get-AzureStorageDataReadServices -RoleDefinitionName ([string]$assignment.RoleDefinitionName))
+      if ($dataReadServices.Count -gt 0) {
+        foreach ($storageAccount in @(Get-AzureStorageAccountsForScope -Scope ([string]$assignment.Scope) -Resources $resources)) {
+          $storageAccountResourceId = [string]$storageAccount.ResourceId
+          if ([string]::IsNullOrWhiteSpace($storageAccountResourceId)) {
+            continue
+          }
+
+          if (-not $storageAccountsWithRbac.ContainsKey($storageAccountResourceId)) {
+            $storageAccountsWithRbac[$storageAccountResourceId] = [ordered]@{
+              resource = $storageAccount
+              dataPlaneReadServices = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+              dataPlaneReadRoleNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+              rbacScopes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+            }
+          }
+
+          foreach ($service in $dataReadServices) {
+            $storageAccountsWithRbac[$storageAccountResourceId].dataPlaneReadServices.Add([string]$service) | Out-Null
+          }
+
+          $storageAccountsWithRbac[$storageAccountResourceId].dataPlaneReadRoleNames.Add([string]$assignment.RoleDefinitionName) | Out-Null
+          $storageAccountsWithRbac[$storageAccountResourceId].rbacScopes.Add([string]$assignment.Scope) | Out-Null
         }
       }
 
@@ -479,15 +761,30 @@ function Get-AzureDependencies {
     rbacScopeActivityEvidence = @($rbacScopeActivityEvidence | Sort-Object eventTimestamp, rbacScope, resourceId)
     rbacScopeActivityCallers = @(Get-AzureRbacScopeActivityCallers -ActivityEvidence @($rbacScopeActivityEvidence) |
       Sort-Object @{ Expression = "eventCount"; Descending = $true }, lastSeen)
+    activityDiagnosticSettings = @($activityDiagnosticSettings | Sort-Object subscriptionName, resourceId)
     blobReadEvidence = @($blobReadEvidence | Sort-Object eventTimestamp, storageAccountName, uri)
     blobReadCallers = @(Get-StorageBlobReadCallers -BlobReadEvidence @($blobReadEvidence) |
       Sort-Object @{ Expression = "blobAccessCount"; Descending = $true }, lastSeen)
+    blobReadObjects = @(Get-StorageBlobReadObjects -BlobReadEvidence @($blobReadEvidence) |
+      Sort-Object @{ Expression = "blobReadCount"; Descending = $true }, lastReadAt)
     storageAccountsWithRbac = @($storageAccountsWithRbac.Values | ForEach-Object {
+      $storageAccount = $_.resource
+      $diagnosticSummary = Get-AzureStorageDiagnosticSummary `
+        -StorageAccount $storageAccount `
+        -DataPlaneReadServices @($_.dataPlaneReadServices)
       [pscustomobject]@{
-        resourceId = [string]$_.ResourceId
-        name = [string]$_.Name
-        resourceGroup = [string]$_.ResourceGroupName
-        location = [string]$_.Location
+        resourceId = [string]$storageAccount.ResourceId
+        name = [string]$storageAccount.Name
+        resourceGroup = [string]$storageAccount.ResourceGroupName
+        location = [string]$storageAccount.Location
+        dataPlaneReadServices = @($_.dataPlaneReadServices | Sort-Object)
+        dataPlaneReadRoleNames = @($_.dataPlaneReadRoleNames | Sort-Object)
+        rbacScopes = @($_.rbacScopes | Sort-Object)
+        diagnosticSettings = @($diagnosticSummary.services)
+        diagnosticLogEnabled = [bool]$diagnosticSummary.diagnosticLogEnabled
+        diagnosticLogAnalyticsEnabled = [bool]$diagnosticSummary.diagnosticLogAnalyticsEnabled
+        dataAccessVerificationStatus = [string]$diagnosticSummary.dataAccessVerificationStatus
+        dataAccessVerificationReason = [string]$diagnosticSummary.dataAccessVerificationReason
       }
     } | Sort-Object name)
     logAnalyticsWorkspaceId = [string]$LogAnalyticsWorkspaceId

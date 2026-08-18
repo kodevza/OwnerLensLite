@@ -83,7 +83,7 @@ function Get-TagOwnerConfidence {
   param([string]$TagName)
 
   switch -Regex ($TagName) {
-    "^(owner|serviceOwner|technicalOwner|businessOwner|team)$" { return 80 }
+    "^(owner|serviceOwner|technicalOwner|businessOwner|appOwner|applicationOwner|productOwner|ownedBy|team)$" { return 80 }
     "^(repo|repository|repoName|source|sourceRepo)$" { return 60 }
     "^(application|app|product|service)$" { return 45 }
     default { return 30 }
@@ -250,6 +250,101 @@ function Format-OwnerCandidateTable {
   return ($lines -join [Environment]::NewLine)
 }
 
+function Get-OwnerCandidateSasGeneratorKey {
+  param([object]$BlobRead)
+
+  $sasGeneratorUpn = [string]$BlobRead.sasGeneratorUpn
+  if (-not [string]::IsNullOrWhiteSpace($sasGeneratorUpn)) {
+    return "upn:$sasGeneratorUpn"
+  }
+
+  $sasGeneratorObjectId = [string]$BlobRead.sasGeneratorObjectId
+  if (-not [string]::IsNullOrWhiteSpace($sasGeneratorObjectId)) {
+    return "object:$sasGeneratorObjectId"
+  }
+
+  $sasGeneratorAppId = [string]$BlobRead.sasGeneratorAppId
+  if (-not [string]::IsNullOrWhiteSpace($sasGeneratorAppId)) {
+    return "app:$sasGeneratorAppId"
+  }
+
+  return ""
+}
+
+function Get-OwnerCandidateSasGeneratorName {
+  param([object]$BlobRead)
+
+  $sasGeneratorUpn = [string]$BlobRead.sasGeneratorUpn
+  if (-not [string]::IsNullOrWhiteSpace($sasGeneratorUpn)) {
+    return $sasGeneratorUpn
+  }
+
+  $sasGeneratorObjectId = [string]$BlobRead.sasGeneratorObjectId
+  if (-not [string]::IsNullOrWhiteSpace($sasGeneratorObjectId)) {
+    return $sasGeneratorObjectId
+  }
+
+  return [string]$BlobRead.sasGeneratorAppId
+}
+
+function Get-OwnerCandidateSasGeneratorType {
+  param([object]$BlobRead)
+
+  if (-not [string]::IsNullOrWhiteSpace([string]$BlobRead.sasGeneratorUpn)) {
+    return "User"
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace([string]$BlobRead.sasGeneratorAppId)) {
+    return "ServicePrincipal"
+  }
+
+  return "SasGenerator"
+}
+
+function Get-OwnerCandidateRbacScopeActivityCallerName {
+  param([object]$ActivityCaller)
+
+  $caller = [string]$ActivityCaller.caller
+  if ($caller -match "@") {
+    return $caller
+  }
+
+  $callerName = [string]$ActivityCaller.callerName
+  if (-not [string]::IsNullOrWhiteSpace($callerName)) {
+    return $callerName
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($caller)) {
+    return $caller
+  }
+
+  $callerObjectId = [string]$ActivityCaller.callerObjectId
+  if (-not [string]::IsNullOrWhiteSpace($callerObjectId)) {
+    return $callerObjectId
+  }
+
+  $callerAppId = [string]$ActivityCaller.callerAppId
+  if (-not [string]::IsNullOrWhiteSpace($callerAppId)) {
+    return $callerAppId
+  }
+
+  return [string]$ActivityCaller.callerKey
+}
+
+function Get-OwnerCandidateRbacScopeActivityCallerType {
+  param([object]$ActivityCaller)
+
+  if ([string]$ActivityCaller.caller -match "@") {
+    return "User"
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace([string]$ActivityCaller.callerAppId)) {
+    return "ServicePrincipal"
+  }
+
+  return "ActivityCaller"
+}
+
 function Get-OwnerCandidates {
   [CmdletBinding()]
   param(
@@ -260,7 +355,7 @@ function Get-OwnerCandidates {
 
     [string[]]$GroupOwnerTagNames = @("groupOwner", "ownerGroup", "teamOwner", "team"),
 
-    [string[]]$TagOwnerTagNames = @("owner", "serviceOwner", "costCenter", "costCentre", "cost-center", "cost_center")
+    [string[]]$TagOwnerTagNames = @("owner", "serviceOwner", "appOwner", "applicationOwner", "productOwner", "ownedBy", "costCenter", "costCentre", "cost-center", "cost_center")
   )
 
   $userOwnerTagNameSet = ConvertTo-OwnerTagNameSet -TagNames $UserOwnerTagNames
@@ -443,6 +538,67 @@ function Get-OwnerCandidates {
       -EvidenceSource ([string]$activity.resourceId) `
       -EvidenceValue ([string]$activity.operationNameValue) `
       -Reason "Recent Azure activity matched the inspected service principal; this is weak ownership evidence."
+  }
+
+  foreach ($activityCaller in @($Report.azure.rbacScopeActivityCallers | Where-Object {
+        -not [bool]$_.matchesInspectedServicePrincipal
+      })) {
+    $candidateName = Get-OwnerCandidateRbacScopeActivityCallerName -ActivityCaller $activityCaller
+    if ([string]::IsNullOrWhiteSpace($candidateName)) {
+      continue
+    }
+
+    $evidenceId = [string](@($activityCaller.rbacScopes) | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string]$_)
+      } | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($evidenceId)) {
+      $evidenceId = [string]$activityCaller.callerKey
+    }
+
+    $candidates += New-OwnerCandidate `
+      -Candidate $candidateName `
+      -CandidateType (Get-OwnerCandidateRbacScopeActivityCallerType -ActivityCaller $activityCaller) `
+      -Confidence (ConvertTo-OwnerConfidence -Score 50) `
+      -Relationship "Indirect" `
+      -Signal "LOG" `
+      -EvidenceId $evidenceId `
+      -EvidenceSource "AzureActivity" `
+      -EvidenceValue ("events={0},lastSeen={1}" -f [string]$activityCaller.eventCount, [string]$activityCaller.lastSeen) `
+      -Reason "Recent Azure RBAC scope activity was performed by this principal under a scope where the inspected service principal has RBAC."
+  }
+
+  $sasGeneratorGroups = @($Report.azure.blobReadEvidence | Where-Object {
+      ([string]$_.authenticationType).Equals("SAS", [System.StringComparison]::OrdinalIgnoreCase) -and
+      -not [string]::IsNullOrWhiteSpace((Get-OwnerCandidateSasGeneratorKey -BlobRead $_))
+    } | Group-Object { Get-OwnerCandidateSasGeneratorKey -BlobRead $_ })
+
+  foreach ($sasGeneratorGroup in $sasGeneratorGroups) {
+    $sasEvents = @($sasGeneratorGroup.Group | Sort-Object eventTimestamp)
+    $firstSasEvent = $sasEvents | Select-Object -First 1
+    $candidateName = Get-OwnerCandidateSasGeneratorName -BlobRead $firstSasEvent
+    if ([string]::IsNullOrWhiteSpace($candidateName)) {
+      continue
+    }
+
+    $evidenceId = [string]$firstSasEvent.storageAccountResourceId
+    if ([string]::IsNullOrWhiteSpace($evidenceId)) {
+      $evidenceId = [string]$firstSasEvent.uri
+    }
+
+    $evidenceValues = @($sasEvents | ForEach-Object {
+        Get-OwnerLensDisplayValue -Value $_.operationName -Fallback $_.sasSignedPermissions
+      } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
+
+    $candidates += New-OwnerCandidate `
+      -Candidate $candidateName `
+      -CandidateType (Get-OwnerCandidateSasGeneratorType -BlobRead $firstSasEvent) `
+      -Confidence (ConvertTo-OwnerConfidence -Score 55) `
+      -Relationship "Indirect" `
+      -Signal "SAS" `
+      -EvidenceId $evidenceId `
+      -EvidenceSource "StorageBlobLogs" `
+      -EvidenceValue ([string]($evidenceValues -join ",")) `
+      -Reason "StorageBlobLogs identify this principal as the generator of a user delegation SAS used for blob data-plane access."
   }
 
   $rankedCandidates = @($candidates |

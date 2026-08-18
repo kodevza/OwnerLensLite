@@ -1,4 +1,5 @@
-$privateFunctions = Get-ChildItem -Path (Join-Path $PSScriptRoot "Private") -Filter "*.ps1" -File
+$privateFunctions = Get-ChildItem -Path (Join-Path $PSScriptRoot "Private") -Filter "*.ps1" -File -Recurse |
+  Sort-Object FullName
 foreach ($functionFile in $privateFunctions) {
   . $functionFile.FullName
 }

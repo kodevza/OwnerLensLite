@@ -8,6 +8,13 @@
   Description = 'Lightweight local Enterprise Application dependency evidence workflow for Azure and Microsoft Entra.'
   PowerShellVersion = '7.0'
   CompatiblePSEditions = @('Core')
+  RequiredModules = @(
+    @{
+      ModuleName = 'PwshRichLite'
+      ModuleVersion = '0.1.0'
+      GUID = '8a0fbf7e-2873-4cb8-b6f4-4477983b6117'
+    }
+  )
   FunctionsToExport = @(
     'Invoke-OwnerLensLight'
   )

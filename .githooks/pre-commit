@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+set -eu
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+run_gitleaks() {
+  if command -v gitleaks >/dev/null 2>&1; then
+    gitleaks protect --staged --redact --no-banner "$@"
+    return
+  fi
+
+  if command -v docker >/dev/null 2>&1; then
+    docker run --rm \
+      -v "$repo_root:/repo" \
+      -w /repo \
+      zricethezav/gitleaks:latest \
+      protect --staged --redact --no-banner "$@"
+    return
+  fi
+
+  echo "gitleaks pre-commit hook failed: install gitleaks or Docker." >&2
+  exit 127
+}
+
+run_gitleaks

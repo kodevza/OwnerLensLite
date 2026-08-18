@@ -18,6 +18,11 @@ param(
   [ValidateRange(1, 1000000)]
   [int]$MaxActivityRecords = 5000,
 
+  [string]$SignInUser = "",
+
+  [ValidateRange(1, 1000000)]
+  [int]$MaxUserSignInRecords = 5000,
+
   [string]$LogAnalyticsWorkspaceId = "",
 
   [ValidateRange(1, 1000000)]
@@ -48,9 +53,22 @@ param(
 begin {
   $ErrorActionPreference = "Stop"
 
+  $localRichModuleRoot = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "../PwshRichLight") -ErrorAction SilentlyContinue
+  if ($localRichModuleRoot) {
+    $modulePathEntries = @($env:PSModulePath -split [System.IO.Path]::PathSeparator | Where-Object {
+        -not [string]::IsNullOrWhiteSpace($_)
+      })
+    if ($modulePathEntries -notcontains $localRichModuleRoot.ProviderPath) {
+      $env:PSModulePath = @($localRichModuleRoot.ProviderPath; $modulePathEntries) -join [System.IO.Path]::PathSeparator
+    }
+  }
+
   Import-Module (Join-Path $PSScriptRoot "OwnerLensLight/OwnerLensLight.psd1") -Force
 }
 
 process {
-  Invoke-OwnerLensLight @PSBoundParameters
+  $result = Invoke-OwnerLensLight @PSBoundParameters
+  if ($OutputJson -or $OutputTable) {
+    return $result
+  }
 }

@@ -213,15 +213,38 @@ function Get-StorageBlobReadLogs {
 let targetAccounts = $(New-KqlDynamicStringArray -Values $accountNames);
 let targetResourceIds = $(New-KqlDynamicStringArray -Values $accountResourceIds);
 let readOperations = $(New-KqlDynamicStringArray -Values $BlobReadOperationNames);
-StorageBlobLogs
+let blobAccessEvents = StorageBlobLogs
 | where AccountName in~ (targetAccounts) or _ResourceId in~ (targetResourceIds)
 | where OperationName in~ (readOperations)
 | extend RequesterObjectId = tostring(column_ifexists("RequesterObjectId", "")),
          RequesterAppId = tostring(column_ifexists("RequesterAppId", "")),
          RequesterTenantId = tostring(column_ifexists("RequesterTenantId", "")),
          RequesterUpn = tostring(column_ifexists("RequesterUpn", "")),
-         UserAgentHeader = tostring(column_ifexists("UserAgentHeader", ""))
-| project TimeGenerated, AccountName, OperationName, StatusCode, StatusText, AuthenticationType, RequesterObjectId, RequesterAppId, RequesterTenantId, RequesterUpn, CallerIpAddress, UserAgentHeader, Uri, ObjectKey, _ResourceId
+         UserAgentHeader = tostring(column_ifexists("UserAgentHeader", "")),
+         AuthenticationHash = tostring(column_ifexists("AuthenticationHash", "")),
+         SasExpiryStatus = tostring(column_ifexists("SasExpiryStatus", "")),
+         SasGeneratorObjectId = tostring(extract(@"(?i)(?:[?&]skoid=)([^&]+)", 1, Uri)),
+         SasGeneratorTenantId = tostring(extract(@"(?i)(?:[?&]sktid=)([^&]+)", 1, Uri)),
+         SasStartsOn = tostring(extract(@"(?i)(?:[?&]skt=)([^&]+)", 1, Uri)),
+         SasExpiresOn = tostring(extract(@"(?i)(?:[?&](?:ske|se)=)([^&]+)", 1, Uri)),
+         SasSignedIdentifier = tostring(extract(@"(?i)(?:[?&]si=)([^&]+)", 1, Uri)),
+         SasSignedPermissions = tostring(extract(@"(?i)(?:[?&]sp=)([^&]+)", 1, Uri));
+let sasGeneratorEvents = StorageBlobLogs
+| where AccountName in~ (targetAccounts) or _ResourceId in~ (targetResourceIds)
+| where OperationName =~ "GetUserDelegationKey"
+| extend SasGeneratorEventTimestamp = TimeGenerated,
+         DelegationGeneratorObjectId = tostring(column_ifexists("RequesterObjectId", "")),
+         DelegationGeneratorAppId = tostring(column_ifexists("RequesterAppId", "")),
+         DelegationGeneratorTenantId = tostring(column_ifexists("RequesterTenantId", "")),
+         DelegationGeneratorUpn = tostring(column_ifexists("RequesterUpn", ""))
+| where isnotempty(DelegationGeneratorObjectId)
+| summarize arg_max(SasGeneratorEventTimestamp, DelegationGeneratorAppId, DelegationGeneratorTenantId, DelegationGeneratorUpn) by AccountName, DelegationGeneratorObjectId;
+blobAccessEvents
+| join kind=leftouter sasGeneratorEvents on $left.AccountName == $right.AccountName and $left.SasGeneratorObjectId == $right.DelegationGeneratorObjectId
+| extend SasGeneratorAppId = DelegationGeneratorAppId,
+         SasGeneratorTenantId = iff(isempty(SasGeneratorTenantId), DelegationGeneratorTenantId, SasGeneratorTenantId),
+         SasGeneratorUpn = DelegationGeneratorUpn
+| project TimeGenerated, AccountName, OperationName, StatusCode, StatusText, AuthenticationType, AuthenticationHash, SasExpiryStatus, SasGeneratorObjectId, SasGeneratorTenantId, SasGeneratorUpn, SasGeneratorAppId, SasGeneratorEventTimestamp, SasStartsOn, SasExpiresOn, SasSignedIdentifier, SasSignedPermissions, RequesterObjectId, RequesterAppId, RequesterTenantId, RequesterUpn, CallerIpAddress, UserAgentHeader, Uri, ObjectKey, _ResourceId
 | order by TimeGenerated desc
 | take $MaxRecord
 "@
@@ -242,6 +265,17 @@ StorageBlobLogs
       statusText = [string]$row.StatusText
       accessDirection = Get-StorageBlobAccessDirection -OperationName ([string]$row.OperationName)
       authenticationType = [string]$row.AuthenticationType
+      authenticationHash = [string]$row.AuthenticationHash
+      sasExpiryStatus = [string]$row.SasExpiryStatus
+      sasGeneratorObjectId = [string]$row.SasGeneratorObjectId
+      sasGeneratorAppId = [string]$row.SasGeneratorAppId
+      sasGeneratorTenantId = [string]$row.SasGeneratorTenantId
+      sasGeneratorUpn = [string]$row.SasGeneratorUpn
+      sasGeneratorEventTimestamp = [string]$row.SasGeneratorEventTimestamp
+      sasStartsOn = [string]$row.SasStartsOn
+      sasExpiresOn = [string]$row.SasExpiresOn
+      sasSignedIdentifier = [string]$row.SasSignedIdentifier
+      sasSignedPermissions = [string]$row.SasSignedPermissions
       requesterObjectId = [string]$row.RequesterObjectId
       requesterAppId = [string]$row.RequesterAppId
       requesterTenantId = [string]$row.RequesterTenantId
@@ -321,10 +355,98 @@ function Get-StorageBlobReadCallers {
       operationNames = @($items | Select-Object -ExpandProperty operationName -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
       callerIpAddresses = @($items | Select-Object -ExpandProperty callerIpAddress -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
       userAgentHeaders = @($items | Select-Object -ExpandProperty userAgentHeader -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 10)
+      sasAuthenticationCount = [int](@($items | Where-Object {
+          ([string]$_.authenticationType).Equals("SAS", [System.StringComparison]::OrdinalIgnoreCase)
+        }).Count)
+      sasGeneratorObjectIds = @($items | ForEach-Object { [string]$_.sasGeneratorObjectId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasGeneratorAppIds = @($items | ForEach-Object { [string]$_.sasGeneratorAppId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasGeneratorUpns = @($items | ForEach-Object { [string]$_.sasGeneratorUpn } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasSignedIdentifiers = @($items | ForEach-Object { [string]$_.sasSignedIdentifier } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
       sampleUris = @($items | Select-Object -ExpandProperty uri -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 10)
       matchesInspectedServicePrincipal = [bool](@($items | Where-Object matchesInspectedServicePrincipal).Count -gt 0)
       evidenceConfidence = "medium"
       evidenceReason = "Requester has one or more StorageBlobLogs data-plane records in the selected time window, grouped with both user and service principal identifiers when Azure logged both."
+    }
+  }
+}
+
+function Get-StorageBlobReadObjects {
+  param(
+    [object[]]$BlobReadEvidence
+  )
+
+  $readEvidence = @($BlobReadEvidence | Where-Object {
+      ([string]$_.accessDirection).Equals("Read", [System.StringComparison]::OrdinalIgnoreCase)
+    })
+
+  $groups = @($readEvidence) | Group-Object -Property {
+    $requesterObjectId = [string]$_.requesterObjectId
+    $requesterAppId = [string]$_.requesterAppId
+    $requesterUpn = [string]$_.requesterUpn
+    $uri = [string]$_.uri
+    $objectKey = [string]$_.objectKey
+
+    $requesterKeyParts = @()
+    if (-not [string]::IsNullOrWhiteSpace($requesterObjectId)) {
+      $requesterKeyParts += "object:$requesterObjectId"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($requesterAppId)) {
+      $requesterKeyParts += "app:$requesterAppId"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($requesterUpn)) {
+      $requesterKeyParts += "upn:$requesterUpn"
+    }
+
+    if ($requesterKeyParts.Count -eq 0) {
+      $requesterKeyParts += "unknown"
+    }
+
+    $blobKey = if (-not [string]::IsNullOrWhiteSpace($uri)) {
+      "uri:$uri"
+    } elseif (-not [string]::IsNullOrWhiteSpace($objectKey)) {
+      "objectKey:$objectKey"
+    } else {
+      "unknownBlob"
+    }
+
+    return "$($requesterKeyParts -join "|")|$blobKey"
+  }
+
+  foreach ($group in $groups) {
+    $items = @($group.Group | Sort-Object eventTimestamp)
+    $first = $items | Select-Object -First 1
+    $last = $items | Select-Object -Last 1
+
+    [pscustomobject]@{
+      requesterBlobKey = [string]$group.Name
+      requesterObjectId = [string]$last.requesterObjectId
+      requesterAppId = [string]$last.requesterAppId
+      requesterTenantId = [string]$last.requesterTenantId
+      requesterUpn = [string]$last.requesterUpn
+      requesterType = [string]$last.requesterType
+      authenticationType = [string]$last.authenticationType
+      storageAccountName = [string]$last.storageAccountName
+      storageAccountResourceId = [string]$last.storageAccountResourceId
+      uri = [string]$last.uri
+      objectKey = [string]$last.objectKey
+      sasAuthenticationCount = [int](@($items | Where-Object {
+          ([string]$_.authenticationType).Equals("SAS", [System.StringComparison]::OrdinalIgnoreCase)
+        }).Count)
+      sasGeneratorObjectIds = @($items | ForEach-Object { [string]$_.sasGeneratorObjectId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasGeneratorAppIds = @($items | ForEach-Object { [string]$_.sasGeneratorAppId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasGeneratorUpns = @($items | ForEach-Object { [string]$_.sasGeneratorUpn } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasSignedIdentifiers = @($items | ForEach-Object { [string]$_.sasSignedIdentifier } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      blobReadCount = [int]$items.Count
+      firstReadAt = [string]$first.eventTimestamp
+      lastReadAt = [string]$last.eventTimestamp
+      operationNames = @($items | Select-Object -ExpandProperty operationName -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      callerIpAddresses = @($items | Select-Object -ExpandProperty callerIpAddress -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      userAgentHeaders = @($items | Select-Object -ExpandProperty userAgentHeader -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 10)
+      matchesInspectedServicePrincipal = [bool](@($items | Where-Object matchesInspectedServicePrincipal).Count -gt 0)
+      evidenceConfidence = "medium"
+      evidenceReason = "Requester read a specific blob one or more times according to StorageBlobLogs in the selected time window."
     }
   }
 }
