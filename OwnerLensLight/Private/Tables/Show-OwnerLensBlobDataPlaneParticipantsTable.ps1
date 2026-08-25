@@ -7,11 +7,8 @@ function Get-OwnerLensBlobDataPlaneParticipantsTableRows {
 function Show-OwnerLensBlobDataPlaneParticipantsTable {
   param([object]$Report)
 
-  if ($Report.azure.blobReadCallers.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Recent Blob Data-Plane Participants" -Style "cyan"
-  Get-OwnerLensBlobDataPlaneParticipantsTableRows -BlobReadCallers @($Report.azure.blobReadCallers) |
-    Write-RichTable -Property requesterUpn, requesterObjectId, requesterAppId, requesterType, authenticationType, blobReadCount, blobPublishCount, blobAccessCount, sasAuthenticationCount, sasGeneratorUpns, sasGeneratorObjectIds, sasGeneratorAppIds, firstSeen, lastSeen, matchesInspectedServicePrincipal -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Recent Blob Data-Plane Participants" `
+    -Rows (Get-OwnerLensBlobDataPlaneParticipantsTableRows -BlobReadCallers (Get-OwnerLensReportArray -Report $Report -Path "azure.blobReadCallers")) `
+    -Property requesterUpn, requesterObjectId, requesterAppId, requesterType, authenticationType, blobReadCount, blobPublishCount, blobAccessCount, sasAuthenticationCount, sasGeneratorUpns, sasGeneratorObjectIds, sasGeneratorAppIds, firstSeen, lastSeen, matchesInspectedServicePrincipal
 }

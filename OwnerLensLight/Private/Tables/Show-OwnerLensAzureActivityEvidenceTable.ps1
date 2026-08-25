@@ -7,11 +7,8 @@ function Get-OwnerLensAzureActivityEvidenceTableRows {
 function Show-OwnerLensAzureActivityEvidenceTable {
   param([object]$Report)
 
-  if ($Report.azure.activityEvidence.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Recent Azure Activity Evidence" -Style "cyan"
-  Get-OwnerLensAzureActivityEvidenceTableRows -ActivityEvidence @($Report.azure.activityEvidence) |
-    Write-RichTable -Property eventTimestamp, subscriptionName, operationNameValue, resourceId, status -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Recent Azure Activity Evidence" `
+    -Rows (Get-OwnerLensAzureActivityEvidenceTableRows -ActivityEvidence (Get-OwnerLensReportArray -Report $Report -Path "azure.activityEvidence")) `
+    -Property eventTimestamp, subscriptionName, operationNameValue, resourceId, status
 }

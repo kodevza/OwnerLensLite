@@ -130,7 +130,7 @@ function Format-OwnerLensStorageDiagnosticStatus {
       "$($_.service) ($($details -join ", "))"
     })
 
-  return "[white]Configured: $($serviceSummaries -join "; ")[/]"
+  return "[dim]Configured: $($serviceSummaries -join "; ")[/]"
 }
 
 function Get-OwnerLensPrincipalDisplayText {
@@ -152,16 +152,9 @@ function Get-OwnerLensPrincipalDisplayText {
 function Get-OwnerLensActivityCallerPrincipalType {
   param([object]$Caller)
 
-  $callerValue = [string]$Caller.caller
-  if ($callerValue -match "@") {
-    return "User"
-  }
-
-  if (-not [string]::IsNullOrWhiteSpace([string]$Caller.callerAppId)) {
-    return "ServicePrincipal"
-  }
-
-  return "Principal"
+  return Get-OwnerLensPrincipalType `
+    -Caller ([string]$Caller.caller) `
+    -AppId ([string]$Caller.callerAppId)
 }
 
 function New-OwnerLensAzureRbacTree {
@@ -171,13 +164,19 @@ function New-OwnerLensAzureRbacTree {
     [object]$Report
   )
 
-  $sp = $Report.enterpriseApplication
+  $sp = Get-OwnerLensReportValue -Report $Report -Path "enterpriseApplication"
   $displayName = Get-OwnerLensDisplayValue -Value $sp.displayName -Fallback "service principal"
-  $root = New-RichTree "Service Principal: $displayName (objectId=$($sp.objectId), appId=$($sp.appId))"
-  $roleAssignments = @($Report.azure.roleAssignments)
-  $ownerTagNames = @($Report.meta.ownerTagConfiguration.userOwnerTagNames) +
-    @($Report.meta.ownerTagConfiguration.groupOwnerTagNames) +
-    @($Report.meta.ownerTagConfiguration.tagOwnerTagNames)
+  $root = New-RichTree "[magenta]Service Principal: $displayName (objectId=$($sp.objectId), appId=$($sp.appId))[/]"
+  $roleAssignments = Get-OwnerLensReportArray -Report $Report -Path "azure.roleAssignments"
+  $resourceDependencies = Get-OwnerLensReportArray -Report $Report -Path "azure.resourceDependencies"
+  $coAssignedRoleCandidates = Get-OwnerLensReportArray -Report $Report -Path "azure.coAssignedRoleCandidates"
+  $rbacScopeActivityCallers = Get-OwnerLensReportArray -Report $Report -Path "azure.rbacScopeActivityCallers"
+  $storageAccountsWithRbac = Get-OwnerLensReportArray -Report $Report -Path "azure.storageAccountsWithRbac"
+  $blobReadCallers = Get-OwnerLensReportArray -Report $Report -Path "azure.blobReadCallers"
+  $ownerTagConfiguration = Get-OwnerLensReportValue -Report $Report -Path "meta.ownerTagConfiguration"
+  $ownerTagNames = @($ownerTagConfiguration.userOwnerTagNames) +
+    @($ownerTagConfiguration.groupOwnerTagNames) +
+    @($ownerTagConfiguration.tagOwnerTagNames)
   if ($ownerTagNames.Count -eq 0) {
     $ownerTagNames = @(Get-OwnerLensDefaultAzureOwnerTagNames)
   }
@@ -191,7 +190,7 @@ function New-OwnerLensAzureRbacTree {
     $scope = [string]$scopeGroup.Name
     $assignments = @($scopeGroup.Group | Sort-Object subscriptionName, roleDefinitionName)
     $firstAssignment = $assignments | Select-Object -First 1
-    $dependency = @($Report.azure.resourceDependencies | Where-Object {
+    $dependency = @($resourceDependencies | Where-Object {
         ([string]$_.resourceId).Equals($scope, [System.StringComparison]::OrdinalIgnoreCase)
       } | Select-Object -First 1)
 
@@ -211,7 +210,7 @@ function New-OwnerLensAzureRbacTree {
 
     Add-OwnerLensTagNodes -Tree $resourceNode -Tags $dependency.tags -OwnerTagNames $ownerTagNames
 
-    $coAssignedPrincipals = @($Report.azure.coAssignedRoleCandidates | Where-Object {
+    $coAssignedPrincipals = @($coAssignedRoleCandidates | Where-Object {
         ([string]$_.scope).Equals($scope, [System.StringComparison]::OrdinalIgnoreCase)
       } | Sort-Object principalDisplayName, principalName, roleDefinitionName)
     if ($coAssignedPrincipals.Count -gt 0) {
@@ -242,7 +241,7 @@ function New-OwnerLensAzureRbacTree {
         $principalId = Get-OwnerLensDisplayValue -Value $principal.principalId -Fallback "unknown id"
         $principalUpn = Get-OwnerLensDisplayValue -Value $principal.principalName -Fallback "unknown upn"
         $hasDataAccess = [bool](@($principalGroup.Group | Where-Object {
-              Test-AzureStorageDataReadRole -RoleDefinitionName ([string]$_.roleDefinitionName)
+              [bool]$_.isStorageDataReadRole
             }).Count -gt 0)
         $principalText = Format-OwnerLensPrincipalLabel `
           -Text (Get-OwnerLensPrincipalDisplayText -Label $principalLabel -PrincipalType $principalType -PrincipalId $principalId -PrincipalUpn $principalUpn) `
@@ -258,7 +257,7 @@ function New-OwnerLensAzureRbacTree {
       }
     }
 
-    $activityCallers = @($Report.azure.rbacScopeActivityCallers | Where-Object {
+    $activityCallers = @($rbacScopeActivityCallers | Where-Object {
         @($_.rbacScopes) -contains $scope
       } | Sort-Object @{ Expression = "eventCount"; Descending = $true }, callerName, caller)
     if ($activityCallers.Count -gt 0) {
@@ -267,15 +266,17 @@ function New-OwnerLensAzureRbacTree {
         $callerLabel = Get-OwnerLensDisplayValue -Value $caller.callerName -Fallback (Get-OwnerLensDisplayValue -Value $caller.caller -Fallback $caller.callerKey)
         $callerType = Get-OwnerLensActivityCallerPrincipalType -Caller $caller
         $callerId = Get-OwnerLensDisplayValue -Value $caller.callerObjectId -Fallback $caller.callerAppId
+        $highlightCaller = [bool]$caller.matchesInspectedServicePrincipal -or
+          ([string]$callerType).Equals("User", [System.StringComparison]::OrdinalIgnoreCase)
         $callerText = Format-OwnerLensPrincipalLabel `
           -Text (Get-OwnerLensPrincipalDisplayText -Label $callerLabel -PrincipalType $callerType -PrincipalId $callerId -PrincipalUpn ([string]$caller.caller)) `
           -PrincipalType $callerType `
-          -HasDataAccess ([bool]$caller.matchesInspectedServicePrincipal)
+          -HasDataAccess $highlightCaller
         Add-RichTreeNode $activityNode "$callerText (events=$($caller.eventCount), lastSeen=$($caller.lastSeen), inspectedSP=$($caller.matchesInspectedServicePrincipal))"
       }
     }
 
-    $storageAccounts = @($Report.azure.storageAccountsWithRbac | Where-Object {
+    $storageAccounts = @($storageAccountsWithRbac | Where-Object {
         Test-OwnerLensResourceUnderScope -ResourceId ([string]$_.resourceId) -Scope $scope
       } | Sort-Object name)
     if ($storageAccounts.Count -gt 0) {
@@ -286,7 +287,7 @@ function New-OwnerLensAzureRbacTree {
         $storageAccountNode = Add-RichTreeNode $storageNode "$(Format-OwnerLensRichLink -Text ([string]$storageAccount.name) -Uri (ConvertTo-OwnerLensAzurePortalResourceUri -ResourceId ([string]$storageAccount.resourceId))) (rg=$($storageAccount.resourceGroup), location=$($storageAccount.location), read=$readServices, diagnostics=$verificationStatus)" -PassThru
         Add-RichTreeNode $storageAccountNode (Format-OwnerLensStorageDiagnosticStatus -StorageAccount $storageAccount)
 
-        $blobParticipants = @($Report.azure.blobReadCallers | Where-Object {
+        $blobParticipants = @($blobReadCallers | Where-Object {
             @($_.storageAccounts) -contains [string]$storageAccount.name
           } | Sort-Object @{ Expression = "blobAccessCount"; Descending = $true }, requesterUpn, requesterAppId)
         if ($blobParticipants.Count -gt 0) {

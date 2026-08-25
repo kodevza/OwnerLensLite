@@ -7,11 +7,8 @@ function Get-OwnerLensGraphUserSignInsTableRows {
 function Show-OwnerLensGraphUserSignInsTable {
   param([object]$Report)
 
-  if ($Report.graph.userSignIns.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Microsoft Graph User Sign-Ins" -Style "cyan"
-  Get-OwnerLensGraphUserSignInsTableRows -UserSignIns @($Report.graph.userSignIns) |
-    Write-RichTable -Property createdDateTime, userPrincipalName, appDisplayName, ipAddress, locationCountryOrRegion, locationState, locationCity, clientAppUsed, conditionalAccessStatus, statusErrorCode, statusFailureReason, resourceDisplayName -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Microsoft Graph User Sign-Ins" `
+    -Rows (Get-OwnerLensGraphUserSignInsTableRows -UserSignIns (Get-OwnerLensReportArray -Report $Report -Path "graph.userSignIns")) `
+    -Property createdDateTime, userPrincipalName, appDisplayName, ipAddress, locationCountryOrRegion, locationState, locationCity, clientAppUsed, conditionalAccessStatus, statusErrorCode, statusFailureReason, resourceDisplayName
 }

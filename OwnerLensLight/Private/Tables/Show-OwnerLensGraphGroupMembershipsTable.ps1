@@ -7,11 +7,8 @@ function Get-OwnerLensGraphGroupMembershipsTableRows {
 function Show-OwnerLensGraphGroupMembershipsTable {
   param([object]$Report)
 
-  if ($Report.graph.memberOf.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Microsoft Graph Group Memberships" -Style "cyan"
-  Get-OwnerLensGraphGroupMembershipsTableRows -MemberOf @($Report.graph.memberOf) |
-    Write-RichTable -Property displayName, objectId, objectType -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Microsoft Graph Group Memberships" `
+    -Rows (Get-OwnerLensGraphGroupMembershipsTableRows -MemberOf (Get-OwnerLensReportArray -Report $Report -Path "graph.memberOf")) `
+    -Property displayName, objectId, objectType
 }

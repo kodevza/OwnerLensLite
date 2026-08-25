@@ -51,12 +51,8 @@ function Get-OwnerLensStorageDiagnosticSettingsTableRows {
 function Show-OwnerLensStorageDiagnosticSettingsTable {
   param([object]$Report)
 
-  $storageDiagnosticSettings = @(Get-OwnerLensStorageDiagnosticSettingsTableRows -StorageAccounts @($Report.azure.storageAccountsWithRbac))
-  if ($storageDiagnosticSettings.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Storage Diagnostic Settings" -Style "cyan"
-  $storageDiagnosticSettings |
-    Write-RichTable -Property storageAccountName, service, status, dataAccessLogEnabled, logAnalyticsEnabled, diagnosticSettingNames, workspaceIds, resourceId -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Storage Diagnostic Settings" `
+    -Rows (Get-OwnerLensStorageDiagnosticSettingsTableRows -StorageAccounts (Get-OwnerLensReportArray -Report $Report -Path "azure.storageAccountsWithRbac")) `
+    -Property storageAccountName, service, status, dataAccessLogEnabled, logAnalyticsEnabled, diagnosticSettingNames, workspaceIds, resourceId
 }

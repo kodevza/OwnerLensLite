@@ -156,6 +156,35 @@ function Get-StorageBlobParticipantType {
   return "Unknown"
 }
 
+function ConvertTo-SafeStorageBlobUri {
+  param([string]$Uri)
+
+  if ([string]::IsNullOrWhiteSpace($Uri)) {
+    return ""
+  }
+
+  try {
+    $parsedUri = [System.Uri]::new($Uri)
+    if ($parsedUri.IsAbsoluteUri) {
+      return $parsedUri.GetLeftPart([System.UriPartial]::Path)
+    }
+  } catch {
+    $queryStart = $Uri.IndexOf("?")
+    if ($queryStart -ge 0) {
+      return $Uri.Substring(0, $queryStart)
+    }
+
+    return $Uri
+  }
+
+  $relativeQueryStart = $Uri.IndexOf("?")
+  if ($relativeQueryStart -ge 0) {
+    return $Uri.Substring(0, $relativeQueryStart)
+  }
+
+  return $Uri
+}
+
 function Test-StorageBlobRequesterMatchesServicePrincipal {
   param(
     [object]$BlobAccess,
@@ -225,10 +254,10 @@ let blobAccessEvents = StorageBlobLogs
          SasExpiryStatus = tostring(column_ifexists("SasExpiryStatus", "")),
          SasGeneratorObjectId = tostring(extract(@"(?i)(?:[?&]skoid=)([^&]+)", 1, Uri)),
          SasGeneratorTenantId = tostring(extract(@"(?i)(?:[?&]sktid=)([^&]+)", 1, Uri)),
-         SasStartsOn = tostring(extract(@"(?i)(?:[?&]skt=)([^&]+)", 1, Uri)),
          SasExpiresOn = tostring(extract(@"(?i)(?:[?&](?:ske|se)=)([^&]+)", 1, Uri)),
          SasSignedIdentifier = tostring(extract(@"(?i)(?:[?&]si=)([^&]+)", 1, Uri)),
-         SasSignedPermissions = tostring(extract(@"(?i)(?:[?&]sp=)([^&]+)", 1, Uri));
+         SasSignedPermissions = tostring(extract(@"(?i)(?:[?&]sp=)([^&]+)", 1, Uri)),
+         SafeUri = tostring(split(Uri, "?")[0]);
 let sasGeneratorEvents = StorageBlobLogs
 | where AccountName in~ (targetAccounts) or _ResourceId in~ (targetResourceIds)
 | where OperationName =~ "GetUserDelegationKey"
@@ -244,7 +273,7 @@ blobAccessEvents
 | extend SasGeneratorAppId = DelegationGeneratorAppId,
          SasGeneratorTenantId = iff(isempty(SasGeneratorTenantId), DelegationGeneratorTenantId, SasGeneratorTenantId),
          SasGeneratorUpn = DelegationGeneratorUpn
-| project TimeGenerated, AccountName, OperationName, StatusCode, StatusText, AuthenticationType, AuthenticationHash, SasExpiryStatus, SasGeneratorObjectId, SasGeneratorTenantId, SasGeneratorUpn, SasGeneratorAppId, SasGeneratorEventTimestamp, SasStartsOn, SasExpiresOn, SasSignedIdentifier, SasSignedPermissions, RequesterObjectId, RequesterAppId, RequesterTenantId, RequesterUpn, CallerIpAddress, UserAgentHeader, Uri, ObjectKey, _ResourceId
+| project TimeGenerated, AccountName, OperationName, StatusCode, StatusText, AuthenticationType, AuthenticationHash, SasExpiryStatus, SasGeneratorObjectId, SasGeneratorTenantId, SasGeneratorUpn, SasGeneratorAppId, SasGeneratorEventTimestamp, SasExpiresOn, SasSignedIdentifier, SasSignedPermissions, RequesterObjectId, RequesterAppId, RequesterTenantId, RequesterUpn, CallerIpAddress, UserAgentHeader, SafeUri, ObjectKey, _ResourceId
 | order by TimeGenerated desc
 | take $MaxRecord
 "@
@@ -256,6 +285,12 @@ blobAccessEvents
       -EndTime (Get-Date))
 
   foreach ($row in $rows) {
+    $safeUri = if (-not [string]::IsNullOrWhiteSpace([string]$row.SafeUri)) {
+      [string]$row.SafeUri
+    } else {
+      ConvertTo-SafeStorageBlobUri -Uri ([string]$row.Uri)
+    }
+
     [pscustomobject]@{
       eventTimestamp = [string]$row.TimeGenerated
       storageAccountName = [string]$row.AccountName
@@ -272,7 +307,6 @@ blobAccessEvents
       sasGeneratorTenantId = [string]$row.SasGeneratorTenantId
       sasGeneratorUpn = [string]$row.SasGeneratorUpn
       sasGeneratorEventTimestamp = [string]$row.SasGeneratorEventTimestamp
-      sasStartsOn = [string]$row.SasStartsOn
       sasExpiresOn = [string]$row.SasExpiresOn
       sasSignedIdentifier = [string]$row.SasSignedIdentifier
       sasSignedPermissions = [string]$row.SasSignedPermissions
@@ -283,7 +317,7 @@ blobAccessEvents
       requesterType = Get-StorageBlobParticipantType -RequesterAppId ([string]$row.RequesterAppId) -RequesterUpn ([string]$row.RequesterUpn)
       callerIpAddress = [string]$row.CallerIpAddress
       userAgentHeader = [string]$row.UserAgentHeader
-      uri = [string]$row.Uri
+      uri = ConvertTo-SafeStorageBlobUri -Uri $safeUri
       objectKey = [string]$row.ObjectKey
       matchesInspectedServicePrincipal = if ($ServicePrincipal) {
         [bool](Test-StorageBlobRequesterMatchesServicePrincipal -BlobAccess ([pscustomobject]@{
@@ -305,28 +339,10 @@ function Get-StorageBlobReadCallers {
   )
 
   $groups = @($BlobReadEvidence) | Group-Object -Property {
-    $requesterObjectId = [string]$_.requesterObjectId
-    $requesterAppId = [string]$_.requesterAppId
-    $requesterUpn = [string]$_.requesterUpn
-
-    $keyParts = @()
-    if (-not [string]::IsNullOrWhiteSpace($requesterObjectId)) {
-      $keyParts += "object:$requesterObjectId"
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($requesterAppId)) {
-      $keyParts += "app:$requesterAppId"
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($requesterUpn)) {
-      $keyParts += "upn:$requesterUpn"
-    }
-
-    if ($keyParts.Count -gt 0) {
-      return ($keyParts -join "|")
-    }
-
-    return "unknown"
+    Get-OwnerLensPrincipalKey `
+      -ObjectId ([string]$_.requesterObjectId) `
+      -AppId ([string]$_.requesterAppId) `
+      -Upn ([string]$_.requesterUpn)
   }
 
   foreach ($group in $groups) {
@@ -380,28 +396,13 @@ function Get-StorageBlobReadObjects {
     })
 
   $groups = @($readEvidence) | Group-Object -Property {
-    $requesterObjectId = [string]$_.requesterObjectId
-    $requesterAppId = [string]$_.requesterAppId
-    $requesterUpn = [string]$_.requesterUpn
     $uri = [string]$_.uri
     $objectKey = [string]$_.objectKey
 
-    $requesterKeyParts = @()
-    if (-not [string]::IsNullOrWhiteSpace($requesterObjectId)) {
-      $requesterKeyParts += "object:$requesterObjectId"
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($requesterAppId)) {
-      $requesterKeyParts += "app:$requesterAppId"
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($requesterUpn)) {
-      $requesterKeyParts += "upn:$requesterUpn"
-    }
-
-    if ($requesterKeyParts.Count -eq 0) {
-      $requesterKeyParts += "unknown"
-    }
+    $requesterKey = Get-OwnerLensPrincipalKey `
+      -ObjectId ([string]$_.requesterObjectId) `
+      -AppId ([string]$_.requesterAppId) `
+      -Upn ([string]$_.requesterUpn)
 
     $blobKey = if (-not [string]::IsNullOrWhiteSpace($uri)) {
       "uri:$uri"
@@ -411,7 +412,7 @@ function Get-StorageBlobReadObjects {
       "unknownBlob"
     }
 
-    return "$($requesterKeyParts -join "|")|$blobKey"
+    return "$requesterKey|$blobKey"
   }
 
   foreach ($group in $groups) {

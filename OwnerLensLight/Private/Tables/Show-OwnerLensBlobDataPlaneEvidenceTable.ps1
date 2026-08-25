@@ -7,11 +7,8 @@ function Get-OwnerLensBlobDataPlaneEvidenceTableRows {
 function Show-OwnerLensBlobDataPlaneEvidenceTable {
   param([object]$Report)
 
-  if ($Report.azure.blobReadEvidence.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Recent Blob Data-Plane Evidence" -Style "cyan"
-  Get-OwnerLensBlobDataPlaneEvidenceTableRows -BlobReadEvidence @($Report.azure.blobReadEvidence) |
-    Write-RichTable -Property eventTimestamp, storageAccountName, accessDirection, requesterUpn, requesterObjectId, requesterAppId, requesterType, authenticationType, operationName, statusText, uri -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Recent Blob Data-Plane Evidence" `
+    -Rows (Get-OwnerLensBlobDataPlaneEvidenceTableRows -BlobReadEvidence (Get-OwnerLensReportArray -Report $Report -Path "azure.blobReadEvidence")) `
+    -Property eventTimestamp, storageAccountName, accessDirection, requesterUpn, requesterObjectId, requesterAppId, requesterType, authenticationType, operationName, statusText, uri
 }

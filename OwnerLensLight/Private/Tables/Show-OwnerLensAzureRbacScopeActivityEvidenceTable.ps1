@@ -7,11 +7,8 @@ function Get-OwnerLensAzureRbacScopeActivityEvidenceTableRows {
 function Show-OwnerLensAzureRbacScopeActivityEvidenceTable {
   param([object]$Report)
 
-  if ($Report.azure.rbacScopeActivityEvidence.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Recent Azure RBAC Scope Activity Evidence" -Style "cyan"
-  Get-OwnerLensAzureRbacScopeActivityEvidenceTableRows -RbacScopeActivityEvidence @($Report.azure.rbacScopeActivityEvidence) |
-    Write-RichTable -Property eventTimestamp, callerName, caller, operationNameValue, resourceId, rbacScope, status -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Recent Azure RBAC Scope Activity Evidence" `
+    -Rows (Get-OwnerLensAzureRbacScopeActivityEvidenceTableRows -RbacScopeActivityEvidence (Get-OwnerLensReportArray -Report $Report -Path "azure.rbacScopeActivityEvidence")) `
+    -Property eventTimestamp, callerName, caller, operationNameValue, resourceId, rbacScope, status
 }

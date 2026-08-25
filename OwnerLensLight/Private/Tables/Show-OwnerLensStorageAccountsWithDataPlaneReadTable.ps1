@@ -7,11 +7,8 @@ function Get-OwnerLensStorageAccountsWithDataPlaneReadTableRows {
 function Show-OwnerLensStorageAccountsWithDataPlaneReadTable {
   param([object]$Report)
 
-  if ($Report.azure.storageAccountsWithRbac.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Storage Accounts With Data-Plane Read" -Style "cyan"
-  Get-OwnerLensStorageAccountsWithDataPlaneReadTableRows -StorageAccounts @($Report.azure.storageAccountsWithRbac) |
-    Write-RichTable -Property name, resourceGroup, location, readServices, readRoles, diagnosticLogEnabled, diagnosticLogAnalyticsEnabled, dataAccessVerificationStatus, resourceId -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Storage Accounts With Data-Plane Read" `
+    -Rows (Get-OwnerLensStorageAccountsWithDataPlaneReadTableRows -StorageAccounts (Get-OwnerLensReportArray -Report $Report -Path "azure.storageAccountsWithRbac")) `
+    -Property name, resourceGroup, location, readServices, readRoles, diagnosticLogEnabled, diagnosticLogAnalyticsEnabled, dataAccessVerificationStatus, resourceId
 }

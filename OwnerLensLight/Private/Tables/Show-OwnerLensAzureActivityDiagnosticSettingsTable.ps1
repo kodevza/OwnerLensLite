@@ -39,12 +39,8 @@ function Get-OwnerLensAzureActivityDiagnosticSettingsTableRows {
 function Show-OwnerLensAzureActivityDiagnosticSettingsTable {
   param([object]$Report)
 
-  $activityDiagnosticSettings = @(Get-OwnerLensAzureActivityDiagnosticSettingsTableRows -ActivityDiagnosticSettings @($Report.azure.activityDiagnosticSettings))
-  if ($activityDiagnosticSettings.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Azure Activity Log Diagnostic Settings" -Style "cyan"
-  $activityDiagnosticSettings |
-    Write-RichTable -Property subscriptionName, subscriptionId, status, activityLogEnabled, logAnalyticsEnabled, diagnosticSettingNames, workspaceIds, storageAccountIds, eventHubAuthorizationRuleIds, resourceId -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Azure Activity Log Diagnostic Settings" `
+    -Rows (Get-OwnerLensAzureActivityDiagnosticSettingsTableRows -ActivityDiagnosticSettings (Get-OwnerLensReportArray -Report $Report -Path "azure.activityDiagnosticSettings")) `
+    -Property subscriptionName, subscriptionId, status, activityLogEnabled, logAnalyticsEnabled, diagnosticSettingNames, workspaceIds, storageAccountIds, eventHubAuthorizationRuleIds, resourceId
 }

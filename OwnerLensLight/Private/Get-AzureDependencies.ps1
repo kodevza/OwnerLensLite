@@ -341,6 +341,63 @@ function Test-AzureStorageDiagnosticLogEnabled {
   return $false
 }
 
+function ConvertTo-OwnerLensDiagnosticStatus {
+  param(
+    [object[]]$EnabledSettings,
+    [object[]]$LogAnalyticsSettings,
+    [object[]]$ExternalSettings
+  )
+
+  if (@($LogAnalyticsSettings).Count -gt 0) {
+    return "LogAnalytics"
+  }
+
+  if (@($ExternalSettings).Count -gt 0) {
+    return "ExternalDestination"
+  }
+
+  if (@($EnabledSettings).Count -gt 0) {
+    return "EnabledNoDestinationDetected"
+  }
+
+  return "NotConfigured"
+}
+
+function Get-OwnerLensDiagnosticSettingDestinationSummary {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object[]]$Settings,
+
+    [Parameter(Mandatory = $true)]
+    [scriptblock]$EnabledPredicate
+  )
+
+  $enabledSettings = @($Settings | Where-Object $EnabledPredicate)
+  $logAnalyticsSettings = @($enabledSettings | Where-Object {
+      -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId"))
+    })
+  $externalSettings = @($enabledSettings | Where-Object {
+      -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "StorageAccountId")) -or
+      -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "EventHubAuthorizationRuleId")) -or
+      -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "MarketplacePartnerId"))
+    })
+
+  [pscustomobject]@{
+    enabledSettings = $enabledSettings
+    logAnalyticsSettings = $logAnalyticsSettings
+    externalSettings = $externalSettings
+    status = ConvertTo-OwnerLensDiagnosticStatus `
+      -EnabledSettings $enabledSettings `
+      -LogAnalyticsSettings $logAnalyticsSettings `
+      -ExternalSettings $externalSettings
+    diagnosticSettingNames = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "Name") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    workspaceIds = @($logAnalyticsSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+    storageAccountIds = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "StorageAccountId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+    eventHubAuthorizationRuleIds = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "EventHubAuthorizationRuleId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+    marketplacePartnerIds = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "MarketplacePartnerId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+  }
+}
+
 function Get-AzureStorageDiagnosticSummary {
   param(
     [object]$StorageAccount,
@@ -358,34 +415,18 @@ function Get-AzureStorageDiagnosticSummary {
 
     try {
       $settings = @(Get-AzDiagnosticSetting -ResourceId $serviceResourceId -ErrorAction Stop)
-      $enabledSettings = @($settings | Where-Object {
+      $diagnosticSummary = Get-OwnerLensDiagnosticSettingDestinationSummary -Settings $settings -EnabledPredicate {
           Test-AzureStorageDiagnosticLogEnabled -DiagnosticSetting $_
-        })
-      $logAnalyticsSettings = @($enabledSettings | Where-Object {
-          -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId"))
-        })
-      $externalSettings = @($enabledSettings | Where-Object {
-          -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "StorageAccountId")) -or
-          -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "EventHubAuthorizationRuleId")) -or
-          -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "MarketplacePartnerId"))
-        })
+        }
 
       $serviceRows += [pscustomobject]@{
         service = [string]$service
         resourceId = $serviceResourceId
-        status = if ($logAnalyticsSettings.Count -gt 0) {
-          "LogAnalytics"
-        } elseif ($externalSettings.Count -gt 0) {
-          "ExternalDestination"
-        } elseif ($enabledSettings.Count -gt 0) {
-          "EnabledNoDestinationDetected"
-        } else {
-          "NotConfigured"
-        }
-        dataAccessLogEnabled = [bool]($enabledSettings.Count -gt 0)
-        logAnalyticsEnabled = [bool]($logAnalyticsSettings.Count -gt 0)
-        diagnosticSettingNames = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "Name") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        workspaceIds = @($logAnalyticsSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+        status = [string]$diagnosticSummary.status
+        dataAccessLogEnabled = [bool](@($diagnosticSummary.enabledSettings).Count -gt 0)
+        logAnalyticsEnabled = [bool](@($diagnosticSummary.logAnalyticsSettings).Count -gt 0)
+        diagnosticSettingNames = @($diagnosticSummary.diagnosticSettingNames)
+        workspaceIds = @($diagnosticSummary.workspaceIds)
       }
     } catch {
       $serviceRows += [pscustomobject]@{
@@ -478,38 +519,22 @@ function Get-AzureActivityDiagnosticSummary {
 
   try {
     $settings = @(Get-AzDiagnosticSetting -ResourceId $subscriptionResourceId -ErrorAction Stop)
-    $enabledSettings = @($settings | Where-Object {
+    $diagnosticSummary = Get-OwnerLensDiagnosticSettingDestinationSummary -Settings $settings -EnabledPredicate {
         Test-AzureActivityDiagnosticLogEnabled -DiagnosticSetting $_
-      })
-    $logAnalyticsSettings = @($enabledSettings | Where-Object {
-        -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId"))
-      })
-    $externalSettings = @($enabledSettings | Where-Object {
-        -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "StorageAccountId")) -or
-        -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "EventHubAuthorizationRuleId")) -or
-        -not [string]::IsNullOrWhiteSpace([string](Get-ObjectProperty -Object $_ -PropertyName "MarketplacePartnerId"))
-      })
+      }
 
     return [pscustomobject]@{
       subscriptionId = [string]$Subscription.Id
       subscriptionName = [string]$Subscription.Name
       resourceId = $subscriptionResourceId
-      status = if ($logAnalyticsSettings.Count -gt 0) {
-        "LogAnalytics"
-      } elseif ($externalSettings.Count -gt 0) {
-        "ExternalDestination"
-      } elseif ($enabledSettings.Count -gt 0) {
-        "EnabledNoDestinationDetected"
-      } else {
-        "NotConfigured"
-      }
-      activityLogEnabled = [bool]($enabledSettings.Count -gt 0)
-      logAnalyticsEnabled = [bool]($logAnalyticsSettings.Count -gt 0)
-      diagnosticSettingNames = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "Name") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-      workspaceIds = @($logAnalyticsSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "WorkspaceId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      storageAccountIds = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "StorageAccountId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      eventHubAuthorizationRuleIds = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "EventHubAuthorizationRuleId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      marketplacePartnerIds = @($enabledSettings | ForEach-Object { [string](Get-ObjectProperty -Object $_ -PropertyName "MarketplacePartnerId") } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      status = [string]$diagnosticSummary.status
+      activityLogEnabled = [bool](@($diagnosticSummary.enabledSettings).Count -gt 0)
+      logAnalyticsEnabled = [bool](@($diagnosticSummary.logAnalyticsSettings).Count -gt 0)
+      diagnosticSettingNames = @($diagnosticSummary.diagnosticSettingNames)
+      workspaceIds = @($diagnosticSummary.workspaceIds)
+      storageAccountIds = @($diagnosticSummary.storageAccountIds)
+      eventHubAuthorizationRuleIds = @($diagnosticSummary.eventHubAuthorizationRuleIds)
+      marketplacePartnerIds = @($diagnosticSummary.marketplacePartnerIds)
     }
   } catch {
     return [pscustomobject]@{
@@ -580,154 +605,167 @@ function Get-AzureDependencies {
   $servicePrincipalObjectId = [string]$ServicePrincipal.objectId
   $candidateRoleAssignmentIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
   $queriedCoAssignedScopes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  $originalContext = Get-AzContext
 
   foreach ($subscription in $selectedSubscriptions) {
-    Set-AzContext -SubscriptionId $subscription.Id | Out-Null
-    $activityDiagnosticSettings += Get-AzureActivityDiagnosticSummary -Subscription $subscription
+    try {
+      Set-AzContext -SubscriptionId $subscription.Id -ErrorAction Stop | Out-Null
+      $activityDiagnosticSettings += Get-AzureActivityDiagnosticSummary -Subscription $subscription
 
-    $resources = @(Get-AzResource)
-    $resourceGroups = @(Get-AzResourceGroup)
-    $resourceById = @{}
-    foreach ($resource in $resources) {
-      if (-not [string]::IsNullOrWhiteSpace([string]$resource.ResourceId)) {
-        $resourceById[[string]$resource.ResourceId] = $resource
-      }
-    }
-
-    $resourceGroupByName = @{}
-    foreach ($resourceGroup in $resourceGroups) {
-      if (-not [string]::IsNullOrWhiteSpace([string]$resourceGroup.ResourceGroupName)) {
-        $resourceGroupByName[[string]$resourceGroup.ResourceGroupName] = $resourceGroup
-      }
-    }
-
-    $assignments = @(Get-AzRoleAssignment -ObjectId $servicePrincipalObjectId -ErrorAction SilentlyContinue)
-    foreach ($assignment in $assignments) {
-      $roleAssignments += [pscustomobject]@{
-        subscriptionId = [string]$subscription.Id
-        subscriptionName = [string]$subscription.Name
-        roleAssignmentId = [string]$assignment.RoleAssignmentId
-        scope = [string]$assignment.Scope
-        principalId = [string]$assignment.ObjectId
-        principalType = [string]$assignment.ObjectType
-        principalDisplayName = [string]$assignment.DisplayName
-        roleDefinitionId = [string]$assignment.RoleDefinitionId
-        roleDefinitionName = [string]$assignment.RoleDefinitionName
-        condition = [string]$assignment.Condition
-        conditionVersion = [string]$assignment.ConditionVersion
+      $resources = @(Get-AzResource)
+      $resourceGroups = @(Get-AzResourceGroup)
+      $resourceById = @{}
+      foreach ($resource in $resources) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$resource.ResourceId)) {
+          $resourceById[[string]$resource.ResourceId] = $resource
+        }
       }
 
-      $resourceDependencies += Find-AzureResourceForScope `
-        -Scope ([string]$assignment.Scope) `
-        -ResourceById $resourceById `
-        -ResourceGroupByName $resourceGroupByName `
-        -Subscription $subscription
+      $resourceGroupByName = @{}
+      foreach ($resourceGroup in $resourceGroups) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$resourceGroup.ResourceGroupName)) {
+          $resourceGroupByName[[string]$resourceGroup.ResourceGroupName] = $resourceGroup
+        }
+      }
 
-      $dataReadServices = @(Get-AzureStorageDataReadServices -RoleDefinitionName ([string]$assignment.RoleDefinitionName))
-      if ($dataReadServices.Count -gt 0) {
-        foreach ($storageAccount in @(Get-AzureStorageAccountsForScope -Scope ([string]$assignment.Scope) -Resources $resources)) {
-          $storageAccountResourceId = [string]$storageAccount.ResourceId
-          if ([string]::IsNullOrWhiteSpace($storageAccountResourceId)) {
+      $assignments = @(Get-AzRoleAssignment -ObjectId $servicePrincipalObjectId -ErrorAction Stop)
+      foreach ($assignment in $assignments) {
+        $roleAssignments += [pscustomobject]@{
+          subscriptionId = [string]$subscription.Id
+          subscriptionName = [string]$subscription.Name
+          roleAssignmentId = [string]$assignment.RoleAssignmentId
+          scope = [string]$assignment.Scope
+          principalId = [string]$assignment.ObjectId
+          principalType = [string]$assignment.ObjectType
+          principalDisplayName = [string]$assignment.DisplayName
+          roleDefinitionId = [string]$assignment.RoleDefinitionId
+          roleDefinitionName = [string]$assignment.RoleDefinitionName
+          isStorageDataReadRole = Test-AzureStorageDataReadRole -RoleDefinitionName ([string]$assignment.RoleDefinitionName)
+          condition = [string]$assignment.Condition
+          conditionVersion = [string]$assignment.ConditionVersion
+        }
+
+        $resourceDependencies += Find-AzureResourceForScope `
+          -Scope ([string]$assignment.Scope) `
+          -ResourceById $resourceById `
+          -ResourceGroupByName $resourceGroupByName `
+          -Subscription $subscription
+
+        $dataReadServices = @(Get-AzureStorageDataReadServices -RoleDefinitionName ([string]$assignment.RoleDefinitionName))
+        if ($dataReadServices.Count -gt 0) {
+          foreach ($storageAccount in @(Get-AzureStorageAccountsForScope -Scope ([string]$assignment.Scope) -Resources $resources)) {
+            $storageAccountResourceId = [string]$storageAccount.ResourceId
+            if ([string]::IsNullOrWhiteSpace($storageAccountResourceId)) {
+              continue
+            }
+
+            if (-not $storageAccountsWithRbac.ContainsKey($storageAccountResourceId)) {
+              $storageAccountsWithRbac[$storageAccountResourceId] = [ordered]@{
+                resource = $storageAccount
+                dataPlaneReadServices = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+                dataPlaneReadRoleNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+                rbacScopes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+              }
+            }
+
+            foreach ($service in $dataReadServices) {
+              $storageAccountsWithRbac[$storageAccountResourceId].dataPlaneReadServices.Add([string]$service) | Out-Null
+            }
+
+            $storageAccountsWithRbac[$storageAccountResourceId].dataPlaneReadRoleNames.Add([string]$assignment.RoleDefinitionName) | Out-Null
+            $storageAccountsWithRbac[$storageAccountResourceId].rbacScopes.Add([string]$assignment.Scope) | Out-Null
+          }
+        }
+
+        $assignmentScope = [string]$assignment.Scope
+        if (-not $queriedCoAssignedScopes.Add($assignmentScope)) {
+          continue
+        }
+
+        $sameScopeAssignments = @(Get-AzRoleAssignment -Scope $assignmentScope -ErrorAction Stop)
+        foreach ($sameScopeAssignment in $sameScopeAssignments) {
+          if (-not ([string]$sameScopeAssignment.Scope).Equals([string]$assignment.Scope, [System.StringComparison]::OrdinalIgnoreCase)) {
             continue
           }
 
-          if (-not $storageAccountsWithRbac.ContainsKey($storageAccountResourceId)) {
-            $storageAccountsWithRbac[$storageAccountResourceId] = [ordered]@{
-              resource = $storageAccount
-              dataPlaneReadServices = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-              dataPlaneReadRoleNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-              rbacScopes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+          $candidatePrincipalId = [string]$sameScopeAssignment.ObjectId
+          if ([string]::IsNullOrWhiteSpace($candidatePrincipalId)) {
+            continue
+          }
+
+          if ($candidatePrincipalId.Equals($servicePrincipalObjectId, [System.StringComparison]::OrdinalIgnoreCase)) {
+            continue
+          }
+
+          $candidateRoleAssignmentId = [string]$sameScopeAssignment.RoleAssignmentId
+          if (-not [string]::IsNullOrWhiteSpace($candidateRoleAssignmentId)) {
+            if (-not $candidateRoleAssignmentIds.Add($candidateRoleAssignmentId)) {
+              continue
             }
           }
 
-          foreach ($service in $dataReadServices) {
-            $storageAccountsWithRbac[$storageAccountResourceId].dataPlaneReadServices.Add([string]$service) | Out-Null
-          }
-
-          $storageAccountsWithRbac[$storageAccountResourceId].dataPlaneReadRoleNames.Add([string]$assignment.RoleDefinitionName) | Out-Null
-          $storageAccountsWithRbac[$storageAccountResourceId].rbacScopes.Add([string]$assignment.Scope) | Out-Null
-        }
-      }
-
-      $assignmentScope = [string]$assignment.Scope
-      if (-not $queriedCoAssignedScopes.Add($assignmentScope)) {
-        continue
-      }
-
-      $sameScopeAssignments = @(Get-AzRoleAssignment -Scope $assignmentScope -ErrorAction SilentlyContinue)
-      foreach ($sameScopeAssignment in $sameScopeAssignments) {
-        if (-not ([string]$sameScopeAssignment.Scope).Equals([string]$assignment.Scope, [System.StringComparison]::OrdinalIgnoreCase)) {
-          continue
-        }
-
-        $candidatePrincipalId = [string]$sameScopeAssignment.ObjectId
-        if ([string]::IsNullOrWhiteSpace($candidatePrincipalId)) {
-          continue
-        }
-
-        if ($candidatePrincipalId.Equals($servicePrincipalObjectId, [System.StringComparison]::OrdinalIgnoreCase)) {
-          continue
-        }
-
-        $candidateRoleAssignmentId = [string]$sameScopeAssignment.RoleAssignmentId
-        if (-not [string]::IsNullOrWhiteSpace($candidateRoleAssignmentId)) {
-          if (-not $candidateRoleAssignmentIds.Add($candidateRoleAssignmentId)) {
-            continue
-          }
-        }
-
-        $coAssignedRoleCandidates += [pscustomobject]@{
-          subscriptionId = [string]$subscription.Id
-          subscriptionName = [string]$subscription.Name
-          roleAssignmentId = $candidateRoleAssignmentId
-          scope = [string]$sameScopeAssignment.Scope
-          principalId = $candidatePrincipalId
-          principalType = [string]$sameScopeAssignment.ObjectType
-          principalName = [string]$sameScopeAssignment.SignInName
-          principalDisplayName = [string]$sameScopeAssignment.DisplayName
-          roleDefinitionId = [string]$sameScopeAssignment.RoleDefinitionId
-          roleDefinitionName = [string]$sameScopeAssignment.RoleDefinitionName
-        }
-      }
-    }
-
-    if (-not $SkipActivityLogs) {
-      $logs = Get-AzureActivityLogs `
-        -SubscriptionId ([string]$subscription.Id) `
-        -StartTime $activityStartTime `
-        -MaxRecord $MaxActivityRecords
-
-      foreach ($log in @($logs)) {
-        foreach ($assignment in $assignments) {
-          if (Test-AzureActivityLogMatchesScope -Log $log -Scope ([string]$assignment.Scope)) {
-            $rbacScopeActivityEvidence += New-AzureRbacScopeActivityEvidence `
-              -Subscription $subscription `
-              -Log $log `
-              -RoleAssignment $assignment `
-              -ServicePrincipal $ServicePrincipal
-          }
-        }
-
-        if (Test-ActivityLogMatchesServicePrincipal -Log $log -ServicePrincipal $ServicePrincipal) {
-          $activityEvidence += [pscustomobject]@{
+          $coAssignedRoleCandidates += [pscustomobject]@{
             subscriptionId = [string]$subscription.Id
             subscriptionName = [string]$subscription.Name
-            eventTimestamp = [string]$log.eventTimestamp
-            caller = [string]$log.caller
-            callerObjectId = [string]$log.callerObjectId
-            callerAppId = [string]$log.callerAppId
-            callerName = [string]$log.callerName
-            operationName = [string]$log.operationName
-            operationNameValue = [string]$log.operationNameValue
-            status = [string]$log.status
-            resourceGroupName = [string]$log.resourceGroupName
-            resourceId = [string]$log.resourceId
-            resourceType = [string]$log.resourceType
-            authorizationAction = [string]$log.authorizationAction
-            authorizationScope = [string]$log.authorizationScope
-            evidenceConfidence = "low"
-            evidenceReason = "Activity logs show recent use by this service principal identifier; this is access evidence, not ownership proof."
+            roleAssignmentId = $candidateRoleAssignmentId
+            scope = [string]$sameScopeAssignment.Scope
+            principalId = $candidatePrincipalId
+            principalType = [string]$sameScopeAssignment.ObjectType
+            principalName = [string]$sameScopeAssignment.SignInName
+            principalDisplayName = [string]$sameScopeAssignment.DisplayName
+            roleDefinitionId = [string]$sameScopeAssignment.RoleDefinitionId
+            roleDefinitionName = [string]$sameScopeAssignment.RoleDefinitionName
+            isStorageDataReadRole = Test-AzureStorageDataReadRole -RoleDefinitionName ([string]$sameScopeAssignment.RoleDefinitionName)
           }
+        }
+      }
+
+      if (-not $SkipActivityLogs) {
+        $logs = Get-AzureActivityLogs `
+          -SubscriptionId ([string]$subscription.Id) `
+          -StartTime $activityStartTime `
+          -MaxRecord $MaxActivityRecords
+
+        foreach ($log in @($logs)) {
+          foreach ($assignment in $assignments) {
+            if (Test-AzureActivityLogMatchesScope -Log $log -Scope ([string]$assignment.Scope)) {
+              $rbacScopeActivityEvidence += New-AzureRbacScopeActivityEvidence `
+                -Subscription $subscription `
+                -Log $log `
+                -RoleAssignment $assignment `
+                -ServicePrincipal $ServicePrincipal
+            }
+          }
+
+          if (Test-ActivityLogMatchesServicePrincipal -Log $log -ServicePrincipal $ServicePrincipal) {
+            $activityEvidence += [pscustomobject]@{
+              subscriptionId = [string]$subscription.Id
+              subscriptionName = [string]$subscription.Name
+              eventTimestamp = [string]$log.eventTimestamp
+              caller = [string]$log.caller
+              callerObjectId = [string]$log.callerObjectId
+              callerAppId = [string]$log.callerAppId
+              callerName = [string]$log.callerName
+              operationName = [string]$log.operationName
+              operationNameValue = [string]$log.operationNameValue
+              status = [string]$log.status
+              resourceGroupName = [string]$log.resourceGroupName
+              resourceId = [string]$log.resourceId
+              resourceType = [string]$log.resourceType
+              authorizationAction = [string]$log.authorizationAction
+              authorizationScope = [string]$log.authorizationScope
+              evidenceConfidence = "low"
+              evidenceReason = "Activity logs show recent use by this service principal identifier; this is access evidence, not ownership proof."
+            }
+          }
+        }
+      }
+    } finally {
+      if ($originalContext) {
+        try {
+          Set-AzContext -Context $originalContext -ErrorAction Stop | Out-Null
+        } catch {
+          Write-Warning "Failed to restore the original Azure context after OwnerLens collection."
         }
       }
     }

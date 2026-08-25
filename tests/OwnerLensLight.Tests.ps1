@@ -196,7 +196,7 @@ Describe "OwnerLens Light Azure helper logic" {
             workspaceIds = @("/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law")
           }
         )
-      }) | Should -Be "[white]Configured: Blob (status=LogAnalytics, settings=send-blob-logs, workspaces=[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law]rg-log/workspaces/law[/link])[/]"
+      }) | Should -Be "[dim]Configured: Blob (status=LogAnalytics, settings=send-blob-logs, workspaces=[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law]rg-log/workspaces/law[/link])[/]"
 
     Format-OwnerLensStorageDiagnosticStatus -StorageAccount ([pscustomobject]@{
         diagnosticSettings = @(
@@ -333,6 +333,7 @@ Describe "OwnerLens Light Azure helper logic" {
             principalDisplayName = "Payments Owner"
             principalName = "payments.owner@example.com"
             roleDefinitionName = "Contributor"
+            isStorageDataReadRole = $false
           }
           [pscustomobject]@{
             scope = $scope
@@ -341,6 +342,7 @@ Describe "OwnerLens Light Azure helper logic" {
             principalDisplayName = "Payments Owner"
             principalName = "payments.owner@example.com"
             roleDefinitionName = "Storage Blob Data Reader"
+            isStorageDataReadRole = $true
           }
           [pscustomobject]@{
             scope = $scope
@@ -349,6 +351,7 @@ Describe "OwnerLens Light Azure helper logic" {
             principalDisplayName = "Publisher Agent"
             principalName = ""
             roleDefinitionName = "Storage Queue Data Message Processor"
+            isStorageDataReadRole = $true
           }
         )
         rbacScopeActivityCallers = @(
@@ -437,6 +440,7 @@ Describe "OwnerLens Light Azure helper logic" {
     $treeOutput | Should -Match "Storage Queue Data Message Processor"
     $treeOutput | Should -Match "recent activity callers"
     $treeOutput | Should -Match "Owner User \(User, id=user-1, upn=owner@example.com\)"
+    $tree.Children[0].Children[4].Children[1].Name | Should -Match "\[bold green\]Owner User \(User, id=user-1, upn=owner@example.com\)\[/\]"
     $tree.Children[0].Children[4].Children[0].Name | Should -Match "\[dim green\]Payments Worker \(ServicePrincipal, id=sp-1, upn=app-client-1\)\[/\]"
     $treeOutput | Should -Match "storage accounts with data-plane read"
     $treeOutput | Should -Match "read=Blob"
@@ -449,6 +453,41 @@ Describe "OwnerLens Light Azure helper logic" {
     $tree.Children[0].Name | Should -Match "\[blue\]Resource: \[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1\]st1\[/link\] \(Microsoft.Storage/storageAccounts, rg=rg-1\)\[/\]"
     $tree.Children[0].Children[0].Name | Should -Match "\[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1\]/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1\[/link\]"
     $tree.Children[0].Children[5].Children[0].Children[0].Name | Should -Match "\[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law\]rg-log/workspaces/law\[/link\]"
+
+    $jsonReport = $report | ConvertTo-Json -Depth 40 | ConvertFrom-Json
+    $jsonReport.enterpriseApplication.displayName | Should -Be "Payments Worker"
+    $jsonReport.enterpriseApplication.objectId | Should -Be "sp-1"
+    $jsonReport.enterpriseApplication.appId | Should -Be "app-1"
+    $jsonReport.meta.ownerTagConfiguration.userOwnerTagNames | Should -Contain "userOwner"
+    $jsonReport.meta.ownerTagConfiguration.groupOwnerTagNames | Should -Contain "teamOwner"
+    $jsonReport.meta.ownerTagConfiguration.tagOwnerTagNames | Should -Contain "owner"
+
+    $jsonReport.azure.roleAssignments[0].scope | Should -Be $scope
+    $jsonReport.azure.roleAssignments[0].roleDefinitionName | Should -Be "Storage Blob Data Reader"
+    $jsonReport.azure.resourceDependencies[0].resourceId | Should -Be $scope
+    $jsonReport.azure.resourceDependencies[0].resourceName | Should -Be "st1"
+    $jsonReport.azure.resourceDependencies[0].tags.owner | Should -Be "payments-team"
+
+    $jsonReport.azure.coAssignedRoleCandidates | Should -HaveCount 3
+    $jsonReport.azure.coAssignedRoleCandidates.roleDefinitionName | Should -Contain "Contributor"
+    $jsonReport.azure.coAssignedRoleCandidates.roleDefinitionName | Should -Contain "Storage Queue Data Message Processor"
+
+    $jsonReport.azure.rbacScopeActivityCallers | Should -HaveCount 2
+    $jsonReport.azure.rbacScopeActivityCallers.callerName | Should -Contain "Owner User"
+    $jsonReport.azure.rbacScopeActivityCallers.callerName | Should -Contain "Payments Worker"
+    $jsonReport.azure.rbacScopeActivityCallers.rbacScopes | Should -Contain $scope
+    $jsonReport.azure.rbacScopeActivityCallers.matchesInspectedServicePrincipal | Should -Contain $true
+
+    $jsonReport.azure.storageAccountsWithRbac[0].resourceId | Should -Be $scope
+    $jsonReport.azure.storageAccountsWithRbac[0].dataPlaneReadServices | Should -Contain "Blob"
+    $jsonReport.azure.storageAccountsWithRbac[0].dataAccessVerificationStatus | Should -Be "QueryableInLogAnalytics"
+    $jsonReport.azure.storageAccountsWithRbac[0].diagnosticSettings[0].workspaceIds | Should -Contain "/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law"
+
+    $jsonReport.azure.blobReadCallers[0].requesterAppId | Should -Be "app-1"
+    $jsonReport.azure.blobReadCallers[0].requesterType | Should -Be "ServicePrincipal"
+    $jsonReport.azure.blobReadCallers[0].blobReadCount | Should -Be 2
+    $jsonReport.azure.blobReadCallers[0].blobPublishCount | Should -Be 1
+    $jsonReport.azure.blobReadCallers[0].storageAccounts | Should -Contain "st1"
   }
 
   It "summarizes blob data-plane participants" {
@@ -686,6 +725,57 @@ Describe "OwnerLens Light Azure helper logic" {
     $objects[0].sasGeneratorObjectIds | Should -Be @("sas-user-1")
     $objects[0].sasGeneratorUpns | Should -Be @("sas.owner@example.com")
     $objects[0].sasSignedIdentifiers | Should -Be @("readonly-policy")
+  }
+
+  It "removes SAS signatures from persisted blob log URIs while keeping safe SAS metadata" {
+    Mock Invoke-LogAnalyticsQuery {
+      return @(
+        [pscustomobject]@{
+          TimeGenerated = "2024-01-01T00:00:00Z"
+          AccountName = "st1"
+          _ResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+          OperationName = "GetBlob"
+          StatusCode = "200"
+          StatusText = "Success"
+          AuthenticationType = "SAS"
+          AuthenticationHash = "hash"
+          SasExpiryStatus = ""
+          SasGeneratorObjectId = "sas-user-1"
+          SasGeneratorAppId = "portal-app"
+          SasGeneratorTenantId = "tenant-1"
+          SasGeneratorUpn = "sas.owner@example.com"
+          SasGeneratorEventTimestamp = "2024-01-01T00:00:00Z"
+          SasExpiresOn = "2024-01-02T00%3A00%3A00Z"
+          SasSignedIdentifier = "readonly-policy"
+          SasSignedPermissions = "r"
+          RequesterObjectId = ""
+          RequesterAppId = ""
+          RequesterTenantId = ""
+          RequesterUpn = ""
+          CallerIpAddress = "10.0.0.4"
+          UserAgentHeader = "browser"
+          Uri = "https://st1.blob.core.windows.net/c/a.txt?skoid=sas-user-1&sktid=tenant-1&sp=r&si=readonly-policy&se=2024-01-02T00%3A00%3A00Z&sig=secret"
+          ObjectKey = "/blobServices/default/containers/c/blobs/a.txt"
+        }
+      )
+    }
+
+    $evidence = @(Get-StorageBlobReadLogs `
+        -WorkspaceId "workspace-1" `
+        -StorageAccounts @([pscustomobject]@{
+            Name = "st1"
+            ResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+          }) `
+        -StartTime ([datetime]"2024-01-01T00:00:00Z"))
+
+    $evidence | Should -HaveCount 1
+    $evidence[0].uri | Should -Be "https://st1.blob.core.windows.net/c/a.txt"
+    $evidence[0].uri | Should -Not -Match "sig=|sp=|se=|skoid=|sktid="
+    $evidence[0].sasGeneratorObjectId | Should -Be "sas-user-1"
+    $evidence[0].sasGeneratorTenantId | Should -Be "tenant-1"
+    $evidence[0].sasSignedPermissions | Should -Be "r"
+    $evidence[0].sasSignedIdentifier | Should -Be "readonly-policy"
+    $evidence[0].sasExpiresOn | Should -Be "2024-01-02T00%3A00%3A00Z"
   }
 }
 
@@ -989,7 +1079,7 @@ Describe "OwnerLens Light owner candidate table" {
     $candidates | Should -HaveCount 1
     $candidates[0].candidate | Should -Be "sas.owner@example.com"
     $candidates[0].candidateType | Should -Be "User"
-    $candidates[0].confidence | Should -Be "MED"
+    $candidates[0].confidence | Should -Be "LOW"
     $candidates[0].relationship | Should -Be "Indirect"
     $candidates[0].signal | Should -Be "SAS"
     $candidates[0].evidenceId | Should -Be "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
@@ -1032,7 +1122,7 @@ Describe "OwnerLens Light owner candidate table" {
     $candidates | Should -HaveCount 1
     $candidates[0].candidate | Should -Be "owner@example.com"
     $candidates[0].candidateType | Should -Be "User"
-    $candidates[0].confidence | Should -Be "MED"
+    $candidates[0].confidence | Should -Be "LOW"
     $candidates[0].relationship | Should -Be "Indirect"
     $candidates[0].signal | Should -Be "LOG"
     $candidates[0].evidenceId | Should -Be $scope
@@ -1358,6 +1448,93 @@ Describe "OwnerLens Light Microsoft Graph application owner discovery" {
     $rows[0].lastSeen | Should -Be "2024-01-02T00:00:00Z"
     $rows[1].countryOrRegion | Should -Be "unknown country"
     $rows[1].ipAddress | Should -Be "unknown ip"
+  }
+
+  It "does not retry permanent authorization failures" {
+    $script:attempts = 0
+
+    {
+      Invoke-RestRequestWithRetry `
+        -OperationName "Permanent failure" `
+        -MaxRetryCount 3 `
+        -RetryDelaySeconds 0 `
+        -Request {
+          $script:attempts += 1
+          throw "Response status code does not indicate success: 403 (Forbidden)."
+        }
+    } | Should -Throw
+
+    $script:attempts | Should -Be 1
+  }
+
+  It "propagates Graph application lookup failures while resolving enterprise applications" {
+    $appId = "11111111-1111-1111-1111-111111111111"
+    $objectId = "22222222-2222-2222-2222-222222222222"
+
+    Mock Invoke-RestRequestWithRetry {
+      [pscustomobject]@{
+        id = $objectId
+        appId = $appId
+        displayName = "App One"
+      }
+    }
+
+    Mock Invoke-GraphPagedRequest {
+      if ($Uri -like "/v1.0/servicePrincipals*") {
+        return @(
+          [pscustomobject]@{
+            id = $objectId
+            appId = $appId
+            displayName = "App One"
+          }
+        )
+      }
+
+      if ($Uri -like "/v1.0/applications*") {
+        throw "Graph permission denied"
+      }
+
+      return @()
+    }
+
+    {
+      Resolve-EnterpriseApplication -EnterpriseApplication $objectId
+    } | Should -Throw -ExpectedMessage "*Graph permission denied*"
+  }
+
+  It "throws RBAC collection failures and restores the original Azure context" {
+    Mock Get-AzContext {
+      [pscustomobject]@{
+        Subscription = [pscustomobject]@{
+          Id = "original-sub"
+        }
+      }
+    }
+    Mock Get-AzSubscription {
+      @(
+        [pscustomobject]@{
+          Id = "sub-1"
+          Name = "Sub One"
+          TenantId = "tenant-1"
+          State = "Enabled"
+        }
+      )
+    }
+    Mock Set-AzContext {}
+    Mock Get-AzureActivityDiagnosticSummary { @() }
+    Mock Get-AzResource { @() }
+    Mock Get-AzResourceGroup { @() }
+    Mock Get-AzRoleAssignment { throw "RBAC permission denied" }
+
+    {
+      Get-AzureDependencies `
+        -ServicePrincipal ([pscustomobject]@{ objectId = "sp-1" }) `
+        -SubscriptionIds "sub-1" `
+        -SkipActivityLogs
+    } | Should -Throw -ExpectedMessage "*RBAC permission denied*"
+
+    Should -Invoke Set-AzContext -ParameterFilter { $SubscriptionId -eq "sub-1" } -Exactly 1
+    Should -Invoke Set-AzContext -ParameterFilter { $Context.Subscription.Id -eq "original-sub" } -Exactly 1
   }
 
 }

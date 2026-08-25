@@ -1,3 +1,45 @@
+$OwnerCandidatePolicy = @{
+  ExplicitOwner = @{
+    Enabled = $true
+    Score = 95
+    Signal = "OWNER"
+  }
+
+  ExplicitOwnerTag = @{
+    Enabled = $true
+    Score = 80
+    Signal = "TAG"
+  }
+
+  DirectoryRelationship = @{
+    Enabled = $true
+    Score = 30
+    Signal = "MEMBERSHIP"
+  }
+
+  SharedRbacScope = @{
+    Enabled = $true
+    ScoreByCandidateType = @{
+      User = 35
+      Group = 30
+      Default = 30
+    }
+    Signal = "RBAC"
+  }
+
+  OperationalActivity = @{
+    Enabled = $true
+    Score = 25
+    Signal = "LOG"
+  }
+
+  CredentialGenerator = @{
+    Enabled = $true
+    Score = 40
+    Signal = "SAS"
+  }
+}
+
 function New-OwnerCandidate {
   param(
     [Parameter(Mandatory = $true)]
@@ -39,6 +81,49 @@ function New-OwnerCandidate {
   }
 }
 
+function Test-OwnerCandidatePolicyEnabled {
+  param([hashtable]$Rule)
+
+  return ($Rule -and [bool]$Rule.Enabled)
+}
+
+function Get-OwnerCandidatePolicyScore {
+  param(
+    [Parameter(Mandatory = $true)]
+    [hashtable]$Rule,
+
+    [string]$CandidateType = ""
+  )
+
+  if ($Rule.ScoreByCandidateType) {
+    if (-not [string]::IsNullOrWhiteSpace($CandidateType) -and $Rule.ScoreByCandidateType.ContainsKey($CandidateType)) {
+      return [int]$Rule.ScoreByCandidateType[$CandidateType]
+    }
+
+    if ($Rule.ScoreByCandidateType.ContainsKey("Default")) {
+      return [int]$Rule.ScoreByCandidateType.Default
+    }
+  }
+
+  return [int]$Rule.Score
+}
+
+function Get-OwnerCandidateTextValue {
+  param(
+    [AllowNull()]
+    [object]$Value,
+
+    [string]$Fallback = ""
+  )
+
+  $text = [string]$Value
+  if ([string]::IsNullOrWhiteSpace($text)) {
+    return $Fallback
+  }
+
+  return $text
+}
+
 function ConvertTo-OwnerConfidence {
   param([int]$Score)
 
@@ -76,17 +161,6 @@ function ConvertTo-OwnerCandidateType {
 
       return $ObjectType
     }
-  }
-}
-
-function Get-TagOwnerConfidence {
-  param([string]$TagName)
-
-  switch -Regex ($TagName) {
-    "^(owner|serviceOwner|technicalOwner|businessOwner|appOwner|applicationOwner|productOwner|ownedBy|team)$" { return 80 }
-    "^(repo|repository|repoName|source|sourceRepo)$" { return 60 }
-    "^(application|app|product|service)$" { return 45 }
-    default { return 30 }
   }
 }
 
@@ -334,15 +408,55 @@ function Get-OwnerCandidateRbacScopeActivityCallerName {
 function Get-OwnerCandidateRbacScopeActivityCallerType {
   param([object]$ActivityCaller)
 
-  if ([string]$ActivityCaller.caller -match "@") {
-    return "User"
+  return Get-OwnerLensPrincipalType `
+    -Caller ([string]$ActivityCaller.caller) `
+    -AppId ([string]$ActivityCaller.callerAppId) `
+    -Fallback "ActivityCaller"
+}
+
+function Add-OwnerCandidatesFromTags {
+  param(
+    [object[]]$Tags,
+    [string]$Relationship,
+    [hashtable]$Rule,
+    [string]$EvidenceId,
+    [string]$EvidenceSource,
+    [string]$Reason,
+    [hashtable]$UserOwnerTagNameSet,
+    [hashtable]$GroupOwnerTagNameSet,
+    [hashtable]$TagOwnerTagNameSet
+  )
+
+  if (-not (Test-OwnerCandidatePolicyEnabled -Rule $Rule)) {
+    return @()
   }
 
-  if (-not [string]::IsNullOrWhiteSpace([string]$ActivityCaller.callerAppId)) {
-    return "ServicePrincipal"
-  }
+  foreach ($tag in @($Tags)) {
+    if ([string]::IsNullOrWhiteSpace([string]$tag.Value)) {
+      continue
+    }
 
-  return "ActivityCaller"
+    $candidateType = Resolve-OwnerTagCandidateType `
+      -TagName ([string]$tag.Name) `
+      -UserOwnerTagNameSet $UserOwnerTagNameSet `
+      -GroupOwnerTagNameSet $GroupOwnerTagNameSet `
+      -TagOwnerTagNameSet $TagOwnerTagNameSet
+
+    if ([string]::IsNullOrWhiteSpace($candidateType)) {
+      continue
+    }
+
+    New-OwnerCandidate `
+      -Candidate (Format-OwnerTagCandidateValue -TagName ([string]$tag.Name) -TagValue ([string]$tag.Value) -CandidateType $candidateType) `
+      -CandidateType $candidateType `
+      -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $Rule -CandidateType $candidateType)) `
+      -Relationship $Relationship `
+      -Signal ([string]$Rule.Signal) `
+      -EvidenceId $EvidenceId `
+      -EvidenceSource $EvidenceSource `
+      -EvidenceValue ("{0}={1}" -f $tag.Name, [string]$tag.Value) `
+      -Reason $Reason
+  }
 }
 
 function Get-OwnerCandidates {
@@ -362,7 +476,21 @@ function Get-OwnerCandidates {
   $groupOwnerTagNameSet = ConvertTo-OwnerTagNameSet -TagNames $GroupOwnerTagNames
   $tagOwnerTagNameSet = ConvertTo-OwnerTagNameSet -TagNames $TagOwnerTagNames
   $candidates = @()
-  foreach ($owner in @($Report.graph.owners)) {
+  $enterpriseApplication = Get-OwnerLensReportValue -Report $Report -Path "enterpriseApplication"
+  $graphOwners = Get-OwnerLensReportArray -Report $Report -Path "graph.owners"
+  $graphMemberships = Get-OwnerLensReportArray -Report $Report -Path "graph.memberOf"
+  $coAssignedRoleCandidates = Get-OwnerLensReportArray -Report $Report -Path "azure.coAssignedRoleCandidates"
+  $resourceDependencies = Get-OwnerLensReportArray -Report $Report -Path "azure.resourceDependencies"
+  $azureActivityEvidence = Get-OwnerLensReportArray -Report $Report -Path "azure.activityEvidence"
+  $rbacScopeActivityCallers = Get-OwnerLensReportArray -Report $Report -Path "azure.rbacScopeActivityCallers"
+  $blobReadEvidence = Get-OwnerLensReportArray -Report $Report -Path "azure.blobReadEvidence"
+
+  $rule = $OwnerCandidatePolicy.ExplicitOwner
+  if (-not (Test-OwnerCandidatePolicyEnabled -Rule $rule)) {
+    $graphOwners = @()
+  }
+
+  foreach ($owner in @($graphOwners)) {
     $candidateType = ConvertTo-OwnerCandidateType -ObjectType ([string]$owner.objectType)
     if ($candidateType -eq "User") {
       $candidateName = [string]$owner.userPrincipalName
@@ -385,53 +513,42 @@ function Get-OwnerCandidates {
       $ownerSource = "ServicePrincipal"
     }
 
-    $ownerEvidenceBase = "/servicePrincipals/$($Report.enterpriseApplication.objectId)"
+    $ownerEvidenceBase = "/servicePrincipals/$($enterpriseApplication.objectId)"
     $ownerReason = "Direct Microsoft Graph owner on the service principal."
-    if ($ownerSource -eq "Application" -and -not [string]::IsNullOrWhiteSpace([string]$Report.enterpriseApplication.applicationObjectId)) {
-      $ownerEvidenceBase = "/applications/$($Report.enterpriseApplication.applicationObjectId)"
+    if ($ownerSource -eq "Application" -and -not [string]::IsNullOrWhiteSpace([string]$enterpriseApplication.applicationObjectId)) {
+      $ownerEvidenceBase = "/applications/$($enterpriseApplication.applicationObjectId)"
       $ownerReason = "Direct Microsoft Graph owner on the application registration."
     }
 
     $candidates += New-OwnerCandidate `
       -Candidate $candidateName `
       -CandidateType $candidateType `
-      -Confidence (ConvertTo-OwnerConfidence -Score 95) `
+      -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $rule -CandidateType $candidateType)) `
       -Relationship "Direct" `
-      -Signal "OWNER" `
+      -Signal ([string]$rule.Signal) `
       -EvidenceId ("{0}/owners/{1}" -f $ownerEvidenceBase, [string]$owner.objectId) `
       -EvidenceSource "$ownerEvidenceBase/owners" `
       -EvidenceValue ([string]$owner.objectId) `
       -Reason $ownerReason
   }
 
-  foreach ($tag in @(Get-EnterpriseApplicationOwnerTagEntries -Tags $Report.enterpriseApplication.tags)) {
-    if ([string]::IsNullOrWhiteSpace([string]$tag.Value)) {
-      continue
-    }
+  $candidates += Add-OwnerCandidatesFromTags `
+    -Tags (Get-EnterpriseApplicationOwnerTagEntries -Tags $enterpriseApplication.tags) `
+    -Relationship "Direct" `
+    -Rule $OwnerCandidatePolicy.ExplicitOwnerTag `
+    -EvidenceId ([string]$enterpriseApplication.objectId) `
+    -EvidenceSource "/servicePrincipals/$($enterpriseApplication.objectId)/tags" `
+    -Reason "Owner-like tag found directly on the inspected service principal." `
+    -UserOwnerTagNameSet $userOwnerTagNameSet `
+    -GroupOwnerTagNameSet $groupOwnerTagNameSet `
+    -TagOwnerTagNameSet $tagOwnerTagNameSet
 
-    $candidateType = Resolve-OwnerTagCandidateType `
-      -TagName ([string]$tag.Name) `
-      -UserOwnerTagNameSet $userOwnerTagNameSet `
-      -GroupOwnerTagNameSet $groupOwnerTagNameSet `
-      -TagOwnerTagNameSet $tagOwnerTagNameSet
-
-    if ([string]::IsNullOrWhiteSpace($candidateType)) {
-      continue
-    }
-
-    $candidates += New-OwnerCandidate `
-      -Candidate (Format-OwnerTagCandidateValue -TagName ([string]$tag.Name) -TagValue ([string]$tag.Value) -CandidateType $candidateType) `
-      -CandidateType $candidateType `
-      -Confidence (ConvertTo-OwnerConfidence -Score (Get-TagOwnerConfidence -TagName ([string]$tag.Name))) `
-      -Relationship "Direct" `
-      -Signal "TAG" `
-      -EvidenceId ([string]$Report.enterpriseApplication.objectId) `
-      -EvidenceSource "/servicePrincipals/$($Report.enterpriseApplication.objectId)/tags" `
-      -EvidenceValue ("{0}={1}" -f $tag.Name, [string]$tag.Value) `
-      -Reason "Owner-like tag found directly on the inspected service principal."
+  $rule = $OwnerCandidatePolicy.DirectoryRelationship
+  if (-not (Test-OwnerCandidatePolicyEnabled -Rule $rule)) {
+    $graphMemberships = @()
   }
 
-  foreach ($memberOf in @($Report.graph.memberOf)) {
+  foreach ($memberOf in @($graphMemberships)) {
     $candidateType = ConvertTo-OwnerCandidateType -ObjectType ([string]$memberOf.objectType)
     $candidateName = [string]$memberOf.displayName
     if ([string]::IsNullOrWhiteSpace($candidateName)) {
@@ -441,16 +558,21 @@ function Get-OwnerCandidates {
     $candidates += New-OwnerCandidate `
       -Candidate $candidateName `
       -CandidateType $candidateType `
-      -Confidence (ConvertTo-OwnerConfidence -Score 70) `
+      -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $rule -CandidateType $candidateType)) `
       -Relationship "Indirect" `
-      -Signal "MEMBERSHIP" `
-      -EvidenceId ("/servicePrincipals/{0}/memberOf/{1}" -f $Report.enterpriseApplication.objectId, [string]$memberOf.objectId) `
-      -EvidenceSource "/servicePrincipals/$($Report.enterpriseApplication.objectId)/memberOf" `
+      -Signal ([string]$rule.Signal) `
+      -EvidenceId ("/servicePrincipals/{0}/memberOf/{1}" -f $enterpriseApplication.objectId, [string]$memberOf.objectId) `
+      -EvidenceSource "/servicePrincipals/$($enterpriseApplication.objectId)/memberOf" `
       -EvidenceValue ([string]$memberOf.objectId) `
       -Reason "The service principal is a member of this directory object."
   }
 
-  foreach ($coAssignee in @($Report.azure.coAssignedRoleCandidates)) {
+  $rule = $OwnerCandidatePolicy.SharedRbacScope
+  if (-not (Test-OwnerCandidatePolicyEnabled -Rule $rule)) {
+    $coAssignedRoleCandidates = @()
+  }
+
+  foreach ($coAssignee in @($coAssignedRoleCandidates)) {
     $candidateType = ConvertTo-OwnerCandidateType -ObjectType ([string]$coAssignee.principalType)
     if ($candidateType -eq "Unknown") {
       continue
@@ -473,53 +595,42 @@ function Get-OwnerCandidates {
       continue
     }
 
-    $confidence = if ($candidateType -eq "User") { 65 } elseif ($candidateType -eq "Group") { 60 } else { 45 }
     $candidates += New-OwnerCandidate `
       -Candidate $candidateName `
       -CandidateType $candidateType `
-      -Confidence (ConvertTo-OwnerConfidence -Score $confidence) `
+      -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $rule -CandidateType $candidateType)) `
       -Relationship "Indirect" `
-      -Signal "RBAC" `
+      -Signal ([string]$rule.Signal) `
       -EvidenceId ([string]$coAssignee.scope) `
       -EvidenceSource ([string]$coAssignee.scope) `
       -EvidenceValue ([string]$coAssignee.roleDefinitionName) `
       -Reason "This principal has Azure RBAC on the same scope as the inspected service principal."
   }
 
-  foreach ($resource in @($Report.azure.resourceDependencies)) {
+  foreach ($resource in @($resourceDependencies)) {
     if (-not $resource.tags) {
       continue
     }
 
-    foreach ($tag in @(Get-OwnerCandidateTagEntries -Tags $resource.tags)) {
-      if ([string]::IsNullOrWhiteSpace([string]$tag.Value)) {
-        continue
-      }
-
-      $candidateType = Resolve-OwnerTagCandidateType `
-        -TagName ([string]$tag.Name) `
-        -UserOwnerTagNameSet $userOwnerTagNameSet `
-        -GroupOwnerTagNameSet $groupOwnerTagNameSet `
-        -TagOwnerTagNameSet $tagOwnerTagNameSet
-
-      if ([string]::IsNullOrWhiteSpace($candidateType)) {
-        continue
-      }
-
-      $candidates += New-OwnerCandidate `
-        -Candidate (Format-OwnerTagCandidateValue -TagName ([string]$tag.Name) -TagValue ([string]$tag.Value) -CandidateType $candidateType) `
-        -CandidateType $candidateType `
-        -Confidence (ConvertTo-OwnerConfidence -Score (Get-TagOwnerConfidence -TagName ([string]$tag.Name))) `
-        -Relationship "Indirect" `
-        -Signal "RBAC" `
-        -EvidenceId ([string]$resource.resourceId) `
-        -EvidenceSource ([string]$resource.resourceId) `
-        -EvidenceValue ("{0}={1}" -f $tag.Name, [string]$tag.Value) `
-        -Reason "Azure resource tag found on a resource reached through RBAC assigned to the inspected service principal."
-    }
+    $candidates += Add-OwnerCandidatesFromTags `
+      -Tags (Get-OwnerCandidateTagEntries -Tags $resource.tags) `
+      -Relationship "Indirect" `
+      -Rule $OwnerCandidatePolicy.SharedRbacScope `
+      -EvidenceId ([string]$resource.resourceId) `
+      -EvidenceSource ([string]$resource.resourceId) `
+      -Reason "Azure resource tag found on a resource reached through RBAC assigned to the inspected service principal." `
+      -UserOwnerTagNameSet $userOwnerTagNameSet `
+      -GroupOwnerTagNameSet $groupOwnerTagNameSet `
+      -TagOwnerTagNameSet $tagOwnerTagNameSet
   }
 
-  foreach ($activity in @($Report.azure.activityEvidence)) {
+  $rule = $OwnerCandidatePolicy.OperationalActivity
+  if (-not (Test-OwnerCandidatePolicyEnabled -Rule $rule)) {
+    $azureActivityEvidence = @()
+    $rbacScopeActivityCallers = @()
+  }
+
+  foreach ($activity in @($azureActivityEvidence)) {
     $candidateName = [string]$activity.callerName
     if ([string]::IsNullOrWhiteSpace($candidateName)) {
       $candidateName = [string]$activity.caller
@@ -531,16 +642,16 @@ function Get-OwnerCandidates {
     $candidates += New-OwnerCandidate `
       -Candidate $candidateName `
       -CandidateType "ActivityCaller" `
-      -Confidence (ConvertTo-OwnerConfidence -Score 25) `
+      -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $rule -CandidateType "ActivityCaller")) `
       -Relationship "Indirect" `
-      -Signal "LOG" `
+      -Signal ([string]$rule.Signal) `
       -EvidenceId ([string]$activity.resourceId) `
       -EvidenceSource ([string]$activity.resourceId) `
       -EvidenceValue ([string]$activity.operationNameValue) `
       -Reason "Recent Azure activity matched the inspected service principal; this is weak ownership evidence."
   }
 
-  foreach ($activityCaller in @($Report.azure.rbacScopeActivityCallers | Where-Object {
+  foreach ($activityCaller in @($rbacScopeActivityCallers | Where-Object {
         -not [bool]$_.matchesInspectedServicePrincipal
       })) {
     $candidateName = Get-OwnerCandidateRbacScopeActivityCallerName -ActivityCaller $activityCaller
@@ -558,19 +669,24 @@ function Get-OwnerCandidates {
     $candidates += New-OwnerCandidate `
       -Candidate $candidateName `
       -CandidateType (Get-OwnerCandidateRbacScopeActivityCallerType -ActivityCaller $activityCaller) `
-      -Confidence (ConvertTo-OwnerConfidence -Score 50) `
+      -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $rule -CandidateType (Get-OwnerCandidateRbacScopeActivityCallerType -ActivityCaller $activityCaller))) `
       -Relationship "Indirect" `
-      -Signal "LOG" `
+      -Signal ([string]$rule.Signal) `
       -EvidenceId $evidenceId `
       -EvidenceSource "AzureActivity" `
       -EvidenceValue ("events={0},lastSeen={1}" -f [string]$activityCaller.eventCount, [string]$activityCaller.lastSeen) `
       -Reason "Recent Azure RBAC scope activity was performed by this principal under a scope where the inspected service principal has RBAC."
   }
 
-  $sasGeneratorGroups = @($Report.azure.blobReadEvidence | Where-Object {
+  $sasGeneratorGroups = @($blobReadEvidence | Where-Object {
       ([string]$_.authenticationType).Equals("SAS", [System.StringComparison]::OrdinalIgnoreCase) -and
       -not [string]::IsNullOrWhiteSpace((Get-OwnerCandidateSasGeneratorKey -BlobRead $_))
     } | Group-Object { Get-OwnerCandidateSasGeneratorKey -BlobRead $_ })
+
+  $rule = $OwnerCandidatePolicy.CredentialGenerator
+  if (-not (Test-OwnerCandidatePolicyEnabled -Rule $rule)) {
+    $sasGeneratorGroups = @()
+  }
 
   foreach ($sasGeneratorGroup in $sasGeneratorGroups) {
     $sasEvents = @($sasGeneratorGroup.Group | Sort-Object eventTimestamp)
@@ -586,15 +702,15 @@ function Get-OwnerCandidates {
     }
 
     $evidenceValues = @($sasEvents | ForEach-Object {
-        Get-OwnerLensDisplayValue -Value $_.operationName -Fallback $_.sasSignedPermissions
+        Get-OwnerCandidateTextValue -Value $_.operationName -Fallback $_.sasSignedPermissions
       } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique)
 
     $candidates += New-OwnerCandidate `
       -Candidate $candidateName `
       -CandidateType (Get-OwnerCandidateSasGeneratorType -BlobRead $firstSasEvent) `
-      -Confidence (ConvertTo-OwnerConfidence -Score 55) `
+      -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $rule -CandidateType (Get-OwnerCandidateSasGeneratorType -BlobRead $firstSasEvent))) `
       -Relationship "Indirect" `
-      -Signal "SAS" `
+      -Signal ([string]$rule.Signal) `
       -EvidenceId $evidenceId `
       -EvidenceSource "StorageBlobLogs" `
       -EvidenceValue ([string]($evidenceValues -join ",")) `

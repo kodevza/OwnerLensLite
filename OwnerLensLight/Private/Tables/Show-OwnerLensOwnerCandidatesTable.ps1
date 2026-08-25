@@ -7,11 +7,10 @@ function Get-OwnerLensOwnerCandidatesTableRows {
 function Show-OwnerLensOwnerCandidatesTable {
   param([object]$Report)
 
-  if (@($Report.ownerCandidates).Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Owner Candidates" -Style "cyan"
-  Get-OwnerLensOwnerCandidatesTableRows -OwnerCandidates @($Report.ownerCandidates) |
-    Write-RichTable -Property candidate, type, confidence, relationship, signal, evidenceId -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Owner Candidates" `
+    -Style "bold dim" `
+    -SurroundWithBlankRules `
+    -Rows (Get-OwnerLensOwnerCandidatesTableRows -OwnerCandidates (Get-OwnerLensReportArray -Report $Report -Path "ownerCandidates")) `
+    -Property candidate, type, confidence, relationship, signal, evidenceId
 }

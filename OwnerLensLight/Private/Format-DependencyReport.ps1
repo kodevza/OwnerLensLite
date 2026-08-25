@@ -8,7 +8,7 @@ function Format-DependencyReport {
   )
 
   if (-not $Full) {
-    Write-RichRule "Azure RBAC Relationship Tree" -Style "cyan"
+    Write-OwnerLensRule -Text "Azure RBAC Relationship Tree" -Style "dim"
     Write-RichTree (New-OwnerLensAzureRbacTree -Report $Report)
     Show-OwnerLensOwnerCandidatesTable -Report $Report
     return
@@ -20,7 +20,7 @@ function Format-DependencyReport {
   Show-OwnerLensEnterpriseApplicationTable -Report $Report
   Show-OwnerLensSummaryTable -Report $Report
 
-  Write-RichRule "Azure RBAC Relationship Tree" -Style "cyan"
+  Write-OwnerLensRule -Text "Azure RBAC Relationship Tree" -Style "cyan"
   Write-RichTree (New-OwnerLensAzureRbacTree -Report $Report)
 
   Show-OwnerLensAzureActivityEvidenceTable -Report $Report

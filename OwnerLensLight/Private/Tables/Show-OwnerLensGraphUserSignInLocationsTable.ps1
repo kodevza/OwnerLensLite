@@ -32,11 +32,8 @@ function Get-OwnerLensGraphUserSignInLocationsTableRows {
 function Show-OwnerLensGraphUserSignInLocationsTable {
   param([object]$Report)
 
-  if ($Report.graph.userSignIns.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Microsoft Graph User Sign-In Locations" -Style "cyan"
-  Get-OwnerLensGraphUserSignInLocationsTableRows -UserSignIns @($Report.graph.userSignIns) |
-    Write-RichTable -Property countryOrRegion, state, city, ipAddress, signInCount, firstSeen, lastSeen -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Microsoft Graph User Sign-In Locations" `
+    -Rows (Get-OwnerLensGraphUserSignInLocationsTableRows -UserSignIns (Get-OwnerLensReportArray -Report $Report -Path "graph.userSignIns")) `
+    -Property countryOrRegion, state, city, ipAddress, signInCount, firstSeen, lastSeen
 }

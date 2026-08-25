@@ -7,11 +7,8 @@ function Get-OwnerLensGraphDelegatedPermissionGrantsTableRows {
 function Show-OwnerLensGraphDelegatedPermissionGrantsTable {
   param([object]$Report)
 
-  if ($Report.graph.oauth2PermissionGrants.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Microsoft Graph Delegated Permission Grants" -Style "cyan"
-  Get-OwnerLensGraphDelegatedPermissionGrantsTableRows -OAuth2PermissionGrants @($Report.graph.oauth2PermissionGrants) |
-    Write-RichTable -Property resourceId, consentType, scope -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Microsoft Graph Delegated Permission Grants" `
+    -Rows (Get-OwnerLensGraphDelegatedPermissionGrantsTableRows -OAuth2PermissionGrants (Get-OwnerLensReportArray -Report $Report -Path "graph.oauth2PermissionGrants")) `
+    -Property resourceId, consentType, scope
 }

@@ -7,11 +7,8 @@ function Get-OwnerLensAzureRbacScopeActivityCallersTableRows {
 function Show-OwnerLensAzureRbacScopeActivityCallersTable {
   param([object]$Report)
 
-  if ($Report.azure.rbacScopeActivityCallers.Count -eq 0) {
-    return
-  }
-
-  Write-RichRule "Recent Azure RBAC Scope Activity Callers" -Style "cyan"
-  Get-OwnerLensAzureRbacScopeActivityCallersTableRows -RbacScopeActivityCallers @($Report.azure.rbacScopeActivityCallers) |
-    Write-RichTable -Property callerName, caller, callerObjectId, callerAppId, eventCount, firstSeen, lastSeen, matchesInspectedServicePrincipal -Box Square
+  Write-OwnerLensReportTable `
+    -Title "Recent Azure RBAC Scope Activity Callers" `
+    -Rows (Get-OwnerLensAzureRbacScopeActivityCallersTableRows -RbacScopeActivityCallers (Get-OwnerLensReportArray -Report $Report -Path "azure.rbacScopeActivityCallers")) `
+    -Property callerName, caller, callerObjectId, callerAppId, eventCount, firstSeen, lastSeen, matchesInspectedServicePrincipal
 }
