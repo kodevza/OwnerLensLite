@@ -29,10 +29,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Pester
+      - name: Install test dependencies
         shell: pwsh
         run: |
           Install-Module Pester -Scope CurrentUser -MinimumVersion 5.7.0 -Force -SkipPublisherCheck
+          Install-Module PwshRichLite -Scope CurrentUser -MinimumVersion 0.1.0 -Force -SkipPublisherCheck
 
       - name: Run tests
         shell: pwsh
