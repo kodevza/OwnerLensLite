@@ -42,6 +42,8 @@ function Invoke-OwnerLensLight {
 
     [switch]$OutputTable,
 
+    [switch]$AnonymizeConsoleOutput,
+
     [switch]$SkipActivityLogs,
 
     [switch]$SkipLogin
@@ -49,12 +51,18 @@ function Invoke-OwnerLensLight {
 
   begin {
     $ErrorActionPreference = "Stop"
+    $consoleAnonymizationState = New-OwnerLensAnonymizationState
 
     function Write-ProgressLine {
       param([string]$Message)
 
       $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-      Write-Verbose "[$timestamp] $Message"
+      $progressMessage = [string]$Message
+      if ($AnonymizeConsoleOutput) {
+        $progressMessage = ConvertTo-OwnerLensAnonymizedString -Value $progressMessage -State $consoleAnonymizationState
+      }
+
+      Write-Verbose "[$timestamp] $progressMessage"
     }
 
     try {
@@ -127,10 +135,20 @@ function Invoke-OwnerLensLight {
     }
 
     if ($OutputTable) {
-      return (Format-OwnerCandidateTable -Candidates (Get-OwnerLensReportArray -Report $report -Path "ownerCandidates"))
+      $tableReport = $report
+      if ($AnonymizeConsoleOutput) {
+        $tableReport = ConvertTo-OwnerLensAnonymizedConsoleReport -Report $report
+      }
+
+      return (Format-OwnerCandidateTable -Candidates (Get-OwnerLensReportArray -Report $tableReport -Path "ownerCandidates"))
     }
 
-    Format-DependencyReport -Report $report -Full:($VerbosePreference -eq "Continue")
+    $consoleReport = $report
+    if ($AnonymizeConsoleOutput) {
+      $consoleReport = ConvertTo-OwnerLensAnonymizedConsoleReport -Report $report
+    }
+
+    Format-DependencyReport -Report $consoleReport -Full:($VerbosePreference -eq "Continue")
     return $report
   }
 }

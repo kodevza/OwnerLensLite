@@ -1034,6 +1034,43 @@ Describe "OwnerLens Light owner candidate table" {
     $candidates[0].candidateType | Should -Be "User"
   }
 
+  It "gives storage data-plane read user candidates at least medium confidence" {
+    $scope = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+    $report = [pscustomobject]@{
+      enterpriseApplication = [pscustomobject]@{
+        objectId = "sp-1"
+      }
+      graph = [pscustomobject]@{
+        owners = @()
+        memberOf = @()
+      }
+      azure = [pscustomobject]@{
+        coAssignedRoleCandidates = @(
+          [pscustomobject]@{
+            principalId = "user-1"
+            principalName = "reader@example.com"
+            principalDisplayName = "Storage Reader"
+            principalType = "User"
+            roleDefinitionName = "Storage Blob Data Reader"
+            isStorageDataReadRole = $true
+            scope = $scope
+          }
+        )
+        resourceDependencies = @()
+        activityEvidence = @()
+      }
+    }
+
+    $candidates = @(Get-OwnerCandidates -Report $report)
+
+    $candidates | Should -HaveCount 1
+    $candidates[0].candidate | Should -Be "reader@example.com"
+    $candidates[0].candidateType | Should -Be "User"
+    $candidates[0].confidence | Should -Be "MED"
+    $candidates[0].signal | Should -Be "RBAC"
+    $candidates[0].evidenceId | Should -Be $scope
+  }
+
   It "promotes SAS generators from blob data-plane logs to owner candidates" {
     $report = [pscustomobject]@{
       enterpriseApplication = [pscustomobject]@{

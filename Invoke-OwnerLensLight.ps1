@@ -45,6 +45,8 @@ param(
 
   [switch]$OutputTable,
 
+  [switch]$AnonymizeConsoleOutput,
+
   [switch]$SkipActivityLogs,
 
   [switch]$SkipLogin
