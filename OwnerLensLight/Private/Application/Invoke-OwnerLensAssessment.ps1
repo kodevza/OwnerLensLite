@@ -54,6 +54,7 @@ function Invoke-OwnerLensAssessment {
     -MaxUserSignInRecords $MaxUserSignInRecords
 
   if ($ProgressWriter) {
+    & $ProgressWriter "Microsoft Graph dependency evidence loaded"
     & $ProgressWriter "Loading Azure RBAC/resource/activity dependency evidence"
   }
 
@@ -65,9 +66,15 @@ function Invoke-OwnerLensAssessment {
     -LogAnalyticsWorkspaceId $LogAnalyticsWorkspaceId `
     -MaxBlobReadRecords $MaxBlobReadRecords `
     -BlobReadOperationNames $BlobReadOperationNames `
-    -SkipActivityLogs:$SkipActivityLogs
+    -SkipActivityLogs:$SkipActivityLogs `
+    -ProgressWriter $ProgressWriter
 
-  return New-OwnerLensReport `
+  if ($ProgressWriter) {
+    & $ProgressWriter "Azure RBAC/resource/activity dependency evidence loaded"
+    & $ProgressWriter "Building dependency report"
+  }
+
+  $report = New-OwnerLensReport `
     -ServicePrincipal $servicePrincipal `
     -GraphDependencies $graphDependencies `
     -AzureDependencies $azureDependencies `
@@ -80,4 +87,10 @@ function Invoke-OwnerLensAssessment {
     -GroupOwnerTagNames $GroupOwnerTagNames `
     -TagOwnerTagNames $TagOwnerTagNames `
     -SkipActivityLogs:$SkipActivityLogs
+
+  if ($ProgressWriter) {
+    & $ProgressWriter "Dependency report completed"
+  }
+
+  return $report
 }

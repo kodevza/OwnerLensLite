@@ -62,7 +62,7 @@ function Invoke-OwnerLensLite {
         $progressMessage = ConvertTo-OwnerLensAnonymizedString -Value $progressMessage -State $consoleAnonymizationState
       }
 
-      Write-Verbose "[$timestamp] $progressMessage"
+      Write-Host "[$timestamp] $progressMessage"
     }
 
     try {

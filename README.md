@@ -47,6 +47,8 @@ Scan explicit subscriptions:
 
 If `-SubscriptionIds` is omitted, only the current Azure subscription from `Get-AzContext` is inspected.
 
+During collection, the command prints timestamped progress updates. Azure updates identify the current subscription and report completed stages such as resource/RBAC discovery, Activity Log collection, and optional Log Analytics queries.
+
 # Authentication and permissions
 
 OwnerLensLite uses separate Microsoft Graph and Azure sessions. If no context exists, interactive authentication starts automatically unless `-SkipLogin` is used.

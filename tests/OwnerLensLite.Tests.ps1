@@ -3,6 +3,30 @@ BeforeAll {
 }
 
 Describe "OwnerLensLite Azure helper logic" {
+  It "reports Azure collection stages and completed subscriptions" {
+    $progressMessages = [System.Collections.Generic.List[string]]::new()
+    Mock Get-AzSubscription {
+      @([pscustomobject]@{ Id = "sub-1"; Name = "Sub One"; TenantId = "tenant-1"; State = "Enabled" })
+    }
+    Mock Get-AzContext { $null }
+    Mock Set-AzContext {}
+    Mock Get-AzureActivityDiagnosticSummary { @() }
+    Mock Get-AzResource { @() }
+    Mock Get-AzResourceGroup { @() }
+    Mock Get-AzRoleAssignment { @() }
+
+    Get-AzureDependencies `
+      -ServicePrincipal ([pscustomobject]@{ objectId = "sp-1" }) `
+      -SubscriptionIds "sub-1" `
+      -SkipActivityLogs `
+      -ProgressWriter { param($message) $progressMessages.Add($message) } | Out-Null
+
+    $progressMessages | Should -Contain "Azure: selected 1 subscription(s) for collection."
+    $progressMessages | Should -Contain "Azure [1/1] Sub One: starting collection."
+    $progressMessages | Should -Contain "Azure [1/1] Sub One: completed."
+    $progressMessages | Should -Contain "Azure: collection completed."
+  }
+
   It "matches activity logs by service principal object id, app id, or display name" {
     $servicePrincipal = [pscustomobject]@{
       objectId    = "sp-object-id"

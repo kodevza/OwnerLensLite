@@ -8,8 +8,17 @@ function Get-AzureDependencies {
     [string]$LogAnalyticsWorkspaceId = "",
     [ValidateRange(1, 1000000)] [int]$MaxBlobReadRecords = 5000,
     [string[]]$BlobReadOperationNames = @("GetBlob", "PutBlob", "PutBlock", "PutBlockList", "AppendBlock", "CopyBlob"),
-    [switch]$SkipActivityLogs
+    [switch]$SkipActivityLogs,
+    [scriptblock]$ProgressWriter = $null
   )
+
+  function Write-AzureCollectionProgress {
+    param([string]$Message)
+
+    if ($ProgressWriter) {
+      & $ProgressWriter $Message
+    }
+  }
 
   $subscriptionFilters = Get-AzureSubscriptionFilters -SubscriptionIds $SubscriptionIds
   $enabledSubscriptions = Get-AzSubscription | Where-Object State -EQ "Enabled"
@@ -19,6 +28,8 @@ function Get-AzureDependencies {
     if (-not $subscription) { throw "Subscription not found or not enabled: $filter" }
     if (-not ($selectedSubscriptions | Where-Object Id -EQ $subscription.Id)) { $selectedSubscriptions += $subscription }
   }
+
+  Write-AzureCollectionProgress "Azure: selected $($selectedSubscriptions.Count) subscription(s) for collection."
 
   $roleAssignments = @()
   $coAssignedRoleCandidates = @()
@@ -34,9 +45,14 @@ function Get-AzureDependencies {
   $queriedCoAssignedScopes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
   $originalContext = Get-AzContext
 
+  $subscriptionIndex = 0
   foreach ($subscription in $selectedSubscriptions) {
+    $subscriptionIndex++
+    $subscriptionProgressPrefix = "Azure [$subscriptionIndex/$($selectedSubscriptions.Count)] $($subscription.Name)"
     try {
+      Write-AzureCollectionProgress "${subscriptionProgressPrefix}: starting collection."
       Set-AzContext -SubscriptionId $subscription.Id -ErrorAction Stop | Out-Null
+      Write-AzureCollectionProgress "${subscriptionProgressPrefix}: loading resources and resource groups."
       $activityDiagnosticSettings += Get-AzureActivityDiagnosticSummary -Subscription $subscription
       $resources = @(Get-AzResource)
       $resourceGroups = @(Get-AzResourceGroup)
@@ -50,6 +66,7 @@ function Get-AzureDependencies {
       }
 
       $assignments = @(Get-AzRoleAssignment -ObjectId $servicePrincipalObjectId -ErrorAction Stop)
+      Write-AzureCollectionProgress "${subscriptionProgressPrefix}: loaded $($assignments.Count) role assignment(s); checking assigned scopes."
       foreach ($assignment in $assignments) {
         $roleAssignments += [pscustomobject]@{
           subscriptionId = [string]$subscription.Id; subscriptionName = [string]$subscription.Name; roleAssignmentId = [string]$assignment.RoleAssignmentId
@@ -102,6 +119,7 @@ function Get-AzureDependencies {
       }
 
       if (-not $SkipActivityLogs) {
+        Write-AzureCollectionProgress "${subscriptionProgressPrefix}: loading Activity Log records."
         $logs = Get-AzureActivityLogs -SubscriptionId ([string]$subscription.Id) -StartTime $activityStartTime -MaxRecord $MaxActivityRecords
         foreach ($log in @($logs)) {
           foreach ($assignment in $assignments) {
@@ -129,7 +147,13 @@ function Get-AzureDependencies {
             }
           }
         }
+        Write-AzureCollectionProgress "${subscriptionProgressPrefix}: Activity Log collection completed ($(@($logs).Count) record(s) inspected)."
       }
+      else {
+        Write-AzureCollectionProgress "${subscriptionProgressPrefix}: Activity Log collection skipped."
+      }
+
+      Write-AzureCollectionProgress "${subscriptionProgressPrefix}: completed."
     }
     finally {
       if ($originalContext) {
@@ -139,6 +163,7 @@ function Get-AzureDependencies {
   }
 
   if (-not [string]::IsNullOrWhiteSpace($LogAnalyticsWorkspaceId)) {
+    Write-AzureCollectionProgress "Azure: querying Log Analytics for Blob activity across $($storageAccountsWithRbac.Count) storage account(s)."
     $blobReadEvidence = @(Get-StorageBlobReadLogs `
         -WorkspaceId $LogAnalyticsWorkspaceId `
         -StorageAccounts @($storageAccountsWithRbac.Values) `
@@ -146,7 +171,10 @@ function Get-AzureDependencies {
         -StartTime $activityStartTime `
         -MaxRecord $MaxBlobReadRecords `
         -BlobReadOperationNames $BlobReadOperationNames)
+    Write-AzureCollectionProgress "Azure: Log Analytics query completed ($($blobReadEvidence.Count) Blob activity record(s))."
   }
+
+  Write-AzureCollectionProgress "Azure: collection completed."
 
   return [pscustomobject]@{
     requestedSubscriptions     = @($subscriptionFilters)
