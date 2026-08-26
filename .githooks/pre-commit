@@ -24,3 +24,15 @@ run_gitleaks() {
 }
 
 run_gitleaks
+
+staged_powershell_files="$(git diff --cached --name-only --diff-filter=ACMR -- '*.ps1' '*.psm1' '*.psd1')"
+
+if [ -n "$staged_powershell_files" ]; then
+  set -- -NoProfile -File ./scripts/Format-OwnerLensLight.ps1 -Check
+  while IFS= read -r path; do
+    set -- "$@" "$path"
+  done <<EOF
+$staged_powershell_files
+EOF
+  pwsh "$@"
+fi

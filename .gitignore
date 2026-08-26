@@ -7,5 +7,6 @@ output/
 reports/
 artifacts/
 testResults.xml
+coverage.xml
 .env.github-secrets
 foundry-agents/ownerlens-blob-agent/.env
