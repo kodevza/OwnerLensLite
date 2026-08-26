@@ -6,7 +6,7 @@ Enables Azure Blob Storage read and write diagnostic logs for storage accounts.
 Configures a diagnostic setting on each storage account Blob service sub-resource
 (`Microsoft.Storage/storageAccounts/blobServices/default`) so blob read data-plane
 logs flow to one Log Analytics workspace. These logs populate the StorageBlobLogs
-table used by OwnerLens Light to show who read blobs.
+table used by OwnerLens Lite to show who read blobs.
 
 By default, the script scans all enabled subscriptions visible to the current Az
 context. Use -SubscriptionIds to limit the scope.
@@ -40,7 +40,7 @@ $ErrorActionPreference = "Stop"
 function Get-EnabledSubscriptions {
   param([string[]]$Filters)
 
-  $enabledSubscriptions = @(Get-AzSubscription | Where-Object State -eq "Enabled")
+  $enabledSubscriptions = @(Get-AzSubscription | Where-Object State -EQ "Enabled")
   if (-not $Filters -or $Filters.Count -eq 0) {
     return $enabledSubscriptions
   }
@@ -55,7 +55,7 @@ function Get-EnabledSubscriptions {
       throw "Subscription not found or not enabled: $filter"
     }
 
-    if (-not ($selected | Where-Object Id -eq $subscription.Id)) {
+    if (-not ($selected | Where-Object Id -EQ $subscription.Id)) {
       $selected += $subscription
     }
   }
@@ -119,26 +119,26 @@ function New-BlobReadDiagnosticSettingBody {
 
   $properties = [ordered]@{
     workspaceId = $WorkspaceId
-    logs = @($Categories | Sort-Object -Unique | ForEach-Object {
-      [ordered]@{
-        category = [string]$_
-        enabled = $true
-        retentionPolicy = [ordered]@{
-          enabled = $false
-          days = 0
+    logs        = @($Categories | Sort-Object -Unique | ForEach-Object {
+        [ordered]@{
+          category        = [string]$_
+          enabled         = $true
+          retentionPolicy = [ordered]@{
+            enabled = $false
+            days    = 0
+          }
         }
-      }
-    })
+      })
   }
 
   if ($MetricsEnabled) {
     $properties.metrics = @(
       [ordered]@{
-        category = "Transaction"
-        enabled = $true
+        category        = "Transaction"
+        enabled         = $true
         retentionPolicy = [ordered]@{
           enabled = $false
-          days = 0
+          days    = 0
         }
       }
     )
@@ -169,8 +169,8 @@ function Test-StorageReadDiagnosticSettingExists {
     }
 
     $enabledCategories = @($properties.logs |
-      Where-Object { [bool]$_.enabled } |
-      ForEach-Object { [string]$_.category })
+        Where-Object { [bool]$_.enabled } |
+        ForEach-Object { [string]$_.category })
 
     $missingCategory = $false
     foreach ($requiredCategory in $RequiredCategories) {
@@ -230,13 +230,15 @@ foreach ($subscription in $subscriptions) {
       if ([string]$storageAccount.Kind -eq "FileStorage") {
         $status = "SkippedUnsupported"
         $message = "FileStorage accounts do not expose Blob service diagnostic logs."
-      } elseif (Test-StorageReadDiagnosticSettingExists `
+      }
+      elseif (Test-StorageReadDiagnosticSettingExists `
           -ResourceId $blobServiceResourceId `
           -WorkspaceId $WorkspaceResourceId `
           -RequiredCategories $LogCategories) {
         $status = "AlreadyConfigured"
         $message = "$($LogCategories -join ', ') diagnostic logs already route to the target workspace."
-      } elseif ($PSCmdlet.ShouldProcess($blobServiceResourceId, "Enable $($LogCategories -join ', ') diagnostic logs to $WorkspaceResourceId")) {
+      }
+      elseif ($PSCmdlet.ShouldProcess($blobServiceResourceId, "Enable $($LogCategories -join ', ') diagnostic logs to $WorkspaceResourceId")) {
         Invoke-AzRestMethod `
           -Method PUT `
           -Path (Get-DiagnosticSettingPath -ResourceId $blobServiceResourceId -Name $DiagnosticSettingName) `
@@ -245,26 +247,28 @@ foreach ($subscription in $subscriptions) {
 
         $status = "Configured"
         $message = "$($LogCategories -join ', ') diagnostic logs now route to the target workspace."
-      } else {
+      }
+      else {
         $status = "WhatIf"
         $message = "Would configure $($LogCategories -join ', ') diagnostic logs."
       }
-    } catch {
+    }
+    catch {
       $status = "Failed"
       $message = $_.Exception.Message
       Write-Warning "Failed to configure $($storageAccount.Name): $message"
     }
 
     $result = [pscustomobject]@{
-      subscriptionId = [string]$subscription.Id
-      subscriptionName = [string]$subscription.Name
-      resourceGroup = [string]$storageAccount.ResourceGroupName
-      storageAccountName = [string]$storageAccount.Name
+      subscriptionId        = [string]$subscription.Id
+      subscriptionName      = [string]$subscription.Name
+      resourceGroup         = [string]$storageAccount.ResourceGroupName
+      storageAccountName    = [string]$storageAccount.Name
       blobServiceResourceId = [string]$blobServiceResourceId
       diagnosticSettingName = [string]$DiagnosticSettingName
-      workspaceResourceId = [string]$WorkspaceResourceId
-      status = [string]$status
-      message = [string]$message
+      workspaceResourceId   = [string]$WorkspaceResourceId
+      status                = [string]$status
+      message               = [string]$message
     }
 
     $results += $result

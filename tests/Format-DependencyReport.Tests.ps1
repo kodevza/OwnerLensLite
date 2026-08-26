@@ -1,19 +1,19 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
 Describe "OwnerLens dependency report formatting" {
   BeforeEach {
     $script:report = [pscustomobject]@{
       enterpriseApplication = [pscustomobject]@{
-        objectId = "sp-1"
-        appId = "app-1"
+        objectId    = "sp-1"
+        appId       = "app-1"
         displayName = "App One"
       }
-      azure = [pscustomobject]@{
+      azure                 = [pscustomobject]@{
         roleAssignments = @()
       }
-      ownerCandidates = @()
+      ownerCandidates       = @()
     }
     $script:sections = @()
 

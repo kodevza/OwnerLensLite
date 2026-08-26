@@ -10,5 +10,5 @@ foreach ($functionFile in $publicFunctions) {
 }
 
 Export-ModuleMember -Function @(
-  "Invoke-OwnerLensLight"
+  "Invoke-OwnerLensLite"
 )

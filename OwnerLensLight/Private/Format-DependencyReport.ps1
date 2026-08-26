@@ -15,7 +15,7 @@ function Format-DependencyReport {
   }
 
   Write-Host ""
-  Write-RichText "[bold cyan]OwnerLens Light[/] [dim]Enterprise Application dependency report[/]"
+  Write-RichText "[bold cyan]OwnerLens Lite[/] [dim]Enterprise Application dependency report[/]"
 
   Show-OwnerLensEnterpriseApplicationTable -Report $Report
   Show-OwnerLensSummaryTable -Report $Report

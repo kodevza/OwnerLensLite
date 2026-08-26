@@ -1,5 +1,5 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
 Describe "OwnerLens Azure RBAC Scope Activity Evidence table" {
@@ -8,13 +8,13 @@ Describe "OwnerLens Azure RBAC Scope Activity Evidence table" {
     $scope = "/subscriptions/sub-1/resourceGroups/rg-1"
     $rows = @(Get-OwnerLensAzureRbacScopeActivityEvidenceTableRows -RbacScopeActivityEvidence @(
         [pscustomobject]@{
-          eventTimestamp = "2024-01-01T00:00:00Z"
-          callerName = "Owner User"
-          caller = "owner@example.com"
+          eventTimestamp     = "2024-01-01T00:00:00Z"
+          callerName         = "Owner User"
+          caller             = "owner@example.com"
           operationNameValue = "Microsoft.Web/sites/write"
-          resourceId = $resourceId
-          rbacScope = $scope
-          status = "Succeeded"
+          resourceId         = $resourceId
+          rbacScope          = $scope
+          status             = "Succeeded"
         }
       ))
 
@@ -32,13 +32,13 @@ Describe "OwnerLens Azure RBAC Scope Activity Evidence table" {
         azure = [pscustomobject]@{
           rbacScopeActivityEvidence = @(
             [pscustomobject]@{
-              eventTimestamp = "2024-01-01T00:00:00Z"
-              callerName = "Owner User"
-              caller = "owner@example.com"
+              eventTimestamp     = "2024-01-01T00:00:00Z"
+              callerName         = "Owner User"
+              caller             = "owner@example.com"
               operationNameValue = "Microsoft.Web/sites/write"
-              resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app1"
-              rbacScope = "/subscriptions/sub-1/resourceGroups/rg-1"
-              status = "Succeeded"
+              resourceId         = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app1"
+              rbacScope          = "/subscriptions/sub-1/resourceGroups/rg-1"
+              status             = "Succeeded"
             }
           )
         }

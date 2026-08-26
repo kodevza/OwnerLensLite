@@ -1,5 +1,5 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
 Describe "OwnerLens Owner Candidates table" {
@@ -7,12 +7,12 @@ Describe "OwnerLens Owner Candidates table" {
     $evidenceId = "/servicePrincipals/sp-1/owners/user-1"
     $rows = @(Get-OwnerLensOwnerCandidatesTableRows -OwnerCandidates @(
         [pscustomobject]@{
-          candidate = "owner@example.com"
+          candidate     = "owner@example.com"
           candidateType = "User"
-          confidence = "HIGH"
-          relationship = "Direct"
-          signal = "GraphOwner"
-          evidenceId = $evidenceId
+          confidence    = "HIGH"
+          relationship  = "Direct"
+          signal        = "GraphOwner"
+          evidenceId    = $evidenceId
         }
       ))
 
@@ -29,12 +29,12 @@ Describe "OwnerLens Owner Candidates table" {
     Show-OwnerLensOwnerCandidatesTable -Report ([pscustomobject]@{
         ownerCandidates = @(
           [pscustomobject]@{
-            candidate = "owner@example.com"
+            candidate     = "owner@example.com"
             candidateType = "User"
-            confidence = "HIGH"
-            relationship = "Direct"
-            signal = "GraphOwner"
-            evidenceId = "/servicePrincipals/sp-1/owners/user-1"
+            confidence    = "HIGH"
+            relationship  = "Direct"
+            signal        = "GraphOwner"
+            evidenceId    = "/servicePrincipals/sp-1/owners/user-1"
           }
         )
       })

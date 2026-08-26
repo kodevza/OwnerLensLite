@@ -1,14 +1,14 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
 Describe "OwnerLens Microsoft Graph Delegated Permission Grants table" {
   It "generates table rows from permission grants" {
     $rows = @(Get-OwnerLensGraphDelegatedPermissionGrantsTableRows -OAuth2PermissionGrants @(
         [pscustomobject]@{
-          resourceId = "graph-sp"
+          resourceId  = "graph-sp"
           consentType = "AllPrincipals"
-          scope = "User.Read"
+          scope       = "User.Read"
         }
       ))
 

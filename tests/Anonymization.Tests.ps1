@@ -1,5 +1,5 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
 Describe "OwnerLens console anonymization" {
@@ -9,61 +9,61 @@ Describe "OwnerLens console anonymization" {
     $tags["costCenter"] = "cc-42"
 
     $report = [pscustomobject]@{
-      meta = [pscustomobject]@{
-        signInUser = "ada@example.com"
+      meta                  = [pscustomobject]@{
+        signInUser            = "ada@example.com"
         ownerTagConfiguration = [pscustomobject]@{
-          userOwnerTagNames = @("userOwner")
+          userOwnerTagNames  = @("userOwner")
           groupOwnerTagNames = @("ownerGroup")
-          tagOwnerTagNames = @("owner")
+          tagOwnerTagNames   = @("owner")
         }
       }
       enterpriseApplication = [pscustomobject]@{
-        objectId = "11111111-1111-1111-1111-111111111111"
-        appId = "22222222-2222-2222-2222-222222222222"
+        objectId    = "11111111-1111-1111-1111-111111111111"
+        appId       = "22222222-2222-2222-2222-222222222222"
         displayName = "Payments API"
       }
-      graph = [pscustomobject]@{
+      graph                 = [pscustomobject]@{
         owners = @(
           [pscustomobject]@{
-            objectId = "33333333-3333-3333-3333-333333333333"
-            displayName = "Ada Lovelace"
+            objectId          = "33333333-3333-3333-3333-333333333333"
+            displayName       = "Ada Lovelace"
             userPrincipalName = "ada@example.com"
-            objectType = "#microsoft.graph.user"
+            objectType        = "#microsoft.graph.user"
           }
         )
       }
-      azure = [pscustomobject]@{
-        resourceDependencies = @(
+      azure                 = [pscustomobject]@{
+        resourceDependencies    = @(
           [pscustomobject]@{
-            resourceId = "/subscriptions/44444444-4444-4444-4444-444444444444/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/prodstorageacct01"
+            resourceId   = "/subscriptions/44444444-4444-4444-4444-444444444444/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/prodstorageacct01"
             resourceType = "Microsoft.Storage/storageAccounts"
             resourceName = "prodstorageacct01"
-            tags = $tags
+            tags         = $tags
           }
         )
         storageAccountsWithRbac = @(
           [pscustomobject]@{
-            name = "prodstorageacct01"
+            name       = "prodstorageacct01"
             resourceId = "/subscriptions/44444444-4444-4444-4444-444444444444/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/prodstorageacct01"
           }
         )
-        blobReadEvidence = @(
+        blobReadEvidence        = @(
           [pscustomobject]@{
             storageAccountName = "prodstorageacct01"
-            uri = "https://prodstorageacct01.blob.core.windows.net/container/blob.txt"
+            uri                = "https://prodstorageacct01.blob.core.windows.net/container/blob.txt"
           }
         )
-        blobReadCallers = @(
+        blobReadCallers         = @(
           [pscustomobject]@{
             storageAccounts = @("prodstorageacct01")
           }
         )
       }
-      ownerCandidates = @(
+      ownerCandidates       = @(
         [pscustomobject]@{
-          candidate = "ada@example.com"
+          candidate     = "ada@example.com"
           candidateType = "User"
-          evidenceId = "/servicePrincipals/11111111-1111-1111-1111-111111111111/owners/33333333-3333-3333-3333-333333333333"
+          evidenceId    = "/servicePrincipals/11111111-1111-1111-1111-111111111111/owners/33333333-3333-3333-3333-333333333333"
         }
       )
     }
@@ -91,47 +91,47 @@ Describe "OwnerLens console anonymization" {
     Mock Invoke-OwnerLensAssessment {
       [pscustomobject]@{
         enterpriseApplication = [pscustomobject]@{
-          objectId = "11111111-1111-1111-1111-111111111111"
-          appId = "22222222-2222-2222-2222-222222222222"
+          objectId    = "11111111-1111-1111-1111-111111111111"
+          appId       = "22222222-2222-2222-2222-222222222222"
           displayName = "Payments API"
         }
-        azure = [pscustomobject]@{
-          roleAssignments = @()
+        azure                 = [pscustomobject]@{
+          roleAssignments         = @()
           storageAccountsWithRbac = @(
             [pscustomobject]@{
-              name = "prodstorageacct01"
+              name       = "prodstorageacct01"
               resourceId = "/subscriptions/44444444-4444-4444-4444-444444444444/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/prodstorageacct01"
             }
           )
-          blobReadEvidence = @(
+          blobReadEvidence        = @(
             [pscustomobject]@{
               storageAccountName = "prodstorageacct01"
-              uri = "https://prodstorageacct01.blob.core.windows.net/container/blob.txt"
+              uri                = "https://prodstorageacct01.blob.core.windows.net/container/blob.txt"
             }
           )
         }
-        graph = [pscustomobject]@{
+        graph                 = [pscustomobject]@{
           userSignIns = @(
             [pscustomobject]@{
               userPrincipalName = "ada@example.com"
             }
           )
         }
-        ownerCandidates = @(
+        ownerCandidates       = @(
           [pscustomobject]@{
-            candidate = "ada@example.com"
+            candidate     = "ada@example.com"
             candidateType = "User"
-            confidence = "HIGH"
-            relationship = "Direct"
-            signal = "OWNER"
-            evidenceId = "/servicePrincipals/11111111-1111-1111-1111-111111111111/owners/33333333-3333-3333-3333-333333333333"
+            confidence    = "HIGH"
+            relationship  = "Direct"
+            signal        = "OWNER"
+            evidenceId    = "/servicePrincipals/11111111-1111-1111-1111-111111111111/owners/33333333-3333-3333-3333-333333333333"
           }
         )
       }
     }
     Mock Format-DependencyReport { $script:renderedReport = $Report }
 
-    $result = Invoke-OwnerLensLight -EnterpriseApplication "Payments API" -SkipLogin -AnonymizeConsoleOutput
+    $result = Invoke-OwnerLensLite -EnterpriseApplication "Payments API" -SkipLogin -AnonymizeConsoleOutput
     $renderedJson = $script:renderedReport | ConvertTo-Json -Depth 20
 
     $result.enterpriseApplication.objectId | Should -Be "11111111-1111-1111-1111-111111111111"

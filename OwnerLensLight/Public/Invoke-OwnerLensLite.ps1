@@ -1,4 +1,4 @@
-function Invoke-OwnerLensLight {
+function Invoke-OwnerLensLite {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
@@ -67,7 +67,8 @@ function Invoke-OwnerLensLight {
 
     try {
       Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
-    } catch {
+    }
+    catch {
       throw "Microsoft Graph PowerShell module missing: Microsoft.Graph.Authentication. Install: Install-Module Microsoft.Graph -Scope CurrentUser"
     }
 

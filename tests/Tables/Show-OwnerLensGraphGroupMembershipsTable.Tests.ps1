@@ -1,5 +1,5 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
 Describe "OwnerLens Microsoft Graph Group Memberships table" {
@@ -7,8 +7,8 @@ Describe "OwnerLens Microsoft Graph Group Memberships table" {
     $rows = @(Get-OwnerLensGraphGroupMembershipsTableRows -MemberOf @(
         [pscustomobject]@{
           displayName = "Payments"
-          objectId = "group-1"
-          objectType = "Group"
+          objectId    = "group-1"
+          objectType  = "Group"
         }
       ))
 

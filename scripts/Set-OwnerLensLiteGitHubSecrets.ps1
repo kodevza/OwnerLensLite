@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Configures GitHub Actions secrets required to sign and publish OwnerLens Light.
+Configures GitHub Actions secrets required to sign and publish OwnerLens Lite.
 
 .DESCRIPTION
 Reads required secret values from a local dotenv-style file and/or current process environment,
@@ -57,7 +57,7 @@ function Read-DotEnvFile {
     $value = $trimmed.Substring($separatorIndex + 1).Trim()
 
     if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
-        ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+      ($value.StartsWith("'") -and $value.EndsWith("'"))) {
       $value = $value.Substring(1, $value.Length - 2)
     }
 
@@ -150,4 +150,4 @@ foreach ($name in $repositorySecretNames) {
   }
 }
 
-Write-Host "OwnerLens Light GitHub secrets configured."
+Write-Host "OwnerLens Lite GitHub secrets configured."

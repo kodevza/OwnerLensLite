@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Runs the OwnerLens Light Enterprise Application dependency inspection workflow.
+Runs the OwnerLens Lite Enterprise Application dependency inspection workflow.
 #>
 
 param(
@@ -55,7 +55,7 @@ param(
 begin {
   $ErrorActionPreference = "Stop"
 
-  $localRichModuleRoot = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "../PwshRichLight") -ErrorAction SilentlyContinue
+  $localRichModuleRoot = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "../PwshRichLite") -ErrorAction SilentlyContinue
   if ($localRichModuleRoot) {
     $modulePathEntries = @($env:PSModulePath -split [System.IO.Path]::PathSeparator | Where-Object {
         -not [string]::IsNullOrWhiteSpace($_)
@@ -65,11 +65,11 @@ begin {
     }
   }
 
-  Import-Module (Join-Path $PSScriptRoot "OwnerLensLight/OwnerLensLight.psd1") -Force
+  Import-Module (Join-Path $PSScriptRoot "OwnerLensLite/OwnerLensLite.psd1") -Force
 }
 
 process {
-  $result = Invoke-OwnerLensLight @PSBoundParameters
+  $result = Invoke-OwnerLensLite @PSBoundParameters
   if ($OutputJson -or $OutputTable) {
     return $result
   }

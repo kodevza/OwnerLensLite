@@ -1,5 +1,5 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
 Describe "OwnerLens Azure Activity Evidence table" {
@@ -7,11 +7,11 @@ Describe "OwnerLens Azure Activity Evidence table" {
     $resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app1"
     $rows = @(Get-OwnerLensAzureActivityEvidenceTableRows -ActivityEvidence @(
         [pscustomobject]@{
-          eventTimestamp = "2024-01-01T00:00:00Z"
-          subscriptionName = "Sub One"
+          eventTimestamp     = "2024-01-01T00:00:00Z"
+          subscriptionName   = "Sub One"
           operationNameValue = "Microsoft.Web/sites/write"
-          resourceId = $resourceId
-          status = "Succeeded"
+          resourceId         = $resourceId
+          status             = "Succeeded"
         }
       ))
 

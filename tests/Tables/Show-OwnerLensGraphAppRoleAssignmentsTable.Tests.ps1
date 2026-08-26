@@ -1,5 +1,5 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
 Describe "OwnerLens Microsoft Graph App Role Assignments table" {
@@ -7,8 +7,8 @@ Describe "OwnerLens Microsoft Graph App Role Assignments table" {
     $rows = @(Get-OwnerLensGraphAppRoleAssignmentsTableRows -AppRoleAssignments @(
         [pscustomobject]@{
           resourceDisplayName = "Microsoft Graph"
-          appRoleId = "role-1"
-          createdDateTime = "2024-01-01T00:00:00Z"
+          appRoleId           = "role-1"
+          createdDateTime     = "2024-01-01T00:00:00Z"
         }
       ))
 

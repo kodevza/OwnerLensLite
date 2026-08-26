@@ -1,12 +1,12 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
-Describe "OwnerLens Light Azure helper logic" {
+Describe "OwnerLensLite Azure helper logic" {
   It "matches activity logs by service principal object id, app id, or display name" {
     $servicePrincipal = [pscustomobject]@{
-      objectId = "sp-object-id"
-      appId = "app-client-id"
+      objectId    = "sp-object-id"
+      appId       = "app-client-id"
       displayName = "Automation API"
     }
 
@@ -41,7 +41,7 @@ Describe "OwnerLens Light Azure helper logic" {
 
   It "matches activity logs under assigned Azure RBAC scopes" {
     $subscriptionLog = [pscustomobject]@{
-      resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app-1"
+      resourceId         = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app-1"
       authorizationScope = ""
     }
 
@@ -58,7 +58,7 @@ Describe "OwnerLens Light Azure helper logic" {
       -Scope "/subscriptions/sub-1/resourceGroups/rg-2") | Should -BeFalse
 
     $authorizationLog = [pscustomobject]@{
-      resourceId = ""
+      resourceId         = ""
       authorizationScope = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.KeyVault/vaults/kv-1/secrets/s1"
     }
 
@@ -70,29 +70,29 @@ Describe "OwnerLens Light Azure helper logic" {
   It "summarizes RBAC scope activity callers" {
     $callers = @(Get-AzureRbacScopeActivityCallers -ActivityEvidence @(
         [pscustomobject]@{
-          caller = "user@example.com"
-          callerObjectId = "user-1"
-          callerAppId = ""
-          callerName = "User One"
-          callerTenantId = "tenant-1"
-          eventTimestamp = "2024-01-01T00:00:00Z"
-          subscriptionName = "Sub One"
-          rbacScope = "/subscriptions/sub-1/resourceGroups/rg-1"
-          resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app-1"
-          operationNameValue = "Microsoft.Web/sites/write"
+          caller                           = "user@example.com"
+          callerObjectId                   = "user-1"
+          callerAppId                      = ""
+          callerName                       = "User One"
+          callerTenantId                   = "tenant-1"
+          eventTimestamp                   = "2024-01-01T00:00:00Z"
+          subscriptionName                 = "Sub One"
+          rbacScope                        = "/subscriptions/sub-1/resourceGroups/rg-1"
+          resourceId                       = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app-1"
+          operationNameValue               = "Microsoft.Web/sites/write"
           matchesInspectedServicePrincipal = $false
         },
         [pscustomobject]@{
-          caller = "user@example.com"
-          callerObjectId = "user-1"
-          callerAppId = ""
-          callerName = "User One"
-          callerTenantId = "tenant-1"
-          eventTimestamp = "2024-01-02T00:00:00Z"
-          subscriptionName = "Sub One"
-          rbacScope = "/subscriptions/sub-1/resourceGroups/rg-1"
-          resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app-2"
-          operationNameValue = "Microsoft.Web/sites/read"
+          caller                           = "user@example.com"
+          callerObjectId                   = "user-1"
+          callerAppId                      = ""
+          callerName                       = "User One"
+          callerTenantId                   = "tenant-1"
+          eventTimestamp                   = "2024-01-02T00:00:00Z"
+          subscriptionName                 = "Sub One"
+          rbacScope                        = "/subscriptions/sub-1/resourceGroups/rg-1"
+          resourceId                       = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app-2"
+          operationNameValue               = "Microsoft.Web/sites/read"
           matchesInspectedServicePrincipal = $false
         }
       ))
@@ -108,32 +108,32 @@ Describe "OwnerLens Light Azure helper logic" {
   It "finds storage accounts covered by Azure RBAC scopes" {
     $resources = @(
       [pscustomobject]@{
-        Name = "stsub"
-        ResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/stsub"
+        Name              = "stsub"
+        ResourceId        = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/stsub"
         ResourceGroupName = "rg-1"
-        ResourceType = "Microsoft.Storage/storageAccounts"
+        ResourceType      = "Microsoft.Storage/storageAccounts"
       },
       [pscustomobject]@{
-        Name = "app1"
-        ResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app1"
+        Name              = "app1"
+        ResourceId        = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app1"
         ResourceGroupName = "rg-1"
-        ResourceType = "Microsoft.Web/sites"
+        ResourceType      = "Microsoft.Web/sites"
       },
       [pscustomobject]@{
-        Name = "stother"
-        ResourceId = "/subscriptions/sub-1/resourceGroups/rg-2/providers/Microsoft.Storage/storageAccounts/stother"
+        Name              = "stother"
+        ResourceId        = "/subscriptions/sub-1/resourceGroups/rg-2/providers/Microsoft.Storage/storageAccounts/stother"
         ResourceGroupName = "rg-2"
-        ResourceType = "Microsoft.Storage/storageAccounts"
+        ResourceType      = "Microsoft.Storage/storageAccounts"
       }
     )
 
     @(Get-AzureStorageAccountsForScope `
-      -Scope "/subscriptions/sub-1/resourceGroups/rg-1" `
-      -Resources $resources).Name | Should -Be @("stsub")
+        -Scope "/subscriptions/sub-1/resourceGroups/rg-1" `
+        -Resources $resources).Name | Should -Be @("stsub")
 
     @(Get-AzureStorageAccountsForScope `
-      -Scope "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/stsub/blobServices/default/containers/c1" `
-      -Resources $resources).Name | Should -Be @("stsub")
+        -Scope "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/stsub/blobServices/default/containers/c1" `
+        -Resources $resources).Name | Should -Be @("stsub")
   }
 
   It "identifies storage data-plane read roles" {
@@ -189,23 +189,26 @@ Describe "OwnerLens Light Azure helper logic" {
     Format-OwnerLensStorageDiagnosticStatus -StorageAccount ([pscustomobject]@{
         diagnosticSettings = @(
           [pscustomobject]@{
-            service = "Blob"
-            status = "LogAnalytics"
-            dataAccessLogEnabled = $true
+            service                = "Blob"
+            status                 = "LogAnalytics"
+            dataAccessLogEnabled   = $true
             diagnosticSettingNames = @("send-blob-logs")
-            workspaceIds = @("/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law")
+            workspaceIds           = @("/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law")
           }
         )
-      }) | Should -Be "[dim]Configured: Blob (status=LogAnalytics, settings=send-blob-logs, workspaces=[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law]rg-log/workspaces/law[/link])[/]"
+      }) | Should -Be (
+      "[dim]Configured: Blob (status=LogAnalytics, settings=send-blob-logs, " +
+      "workspaces=[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law]rg-log/workspaces/law[/link])[/]"
+    )
 
     Format-OwnerLensStorageDiagnosticStatus -StorageAccount ([pscustomobject]@{
         diagnosticSettings = @(
           [pscustomobject]@{
-            service = "Blob"
-            status = "NotConfigured"
-            dataAccessLogEnabled = $false
+            service                = "Blob"
+            status                 = "NotConfigured"
+            dataAccessLogEnabled   = $false
             diagnosticSettingNames = @()
-            workspaceIds = @()
+            workspaceIds           = @()
           }
         )
       }) | Should -Be "[yellow]No diagnostic settings detected; not possible to detect data access based on logs to increase accuracy.[/]"
@@ -214,10 +217,10 @@ Describe "OwnerLens Light Azure helper logic" {
   It "includes not configured storage diagnostic settings in table rows" {
     $rows = @(Get-OwnerLensStorageDiagnosticSettingRows -StorageAccounts @(
         [pscustomobject]@{
-          resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-          name = "st1"
+          resourceId            = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+          name                  = "st1"
           dataPlaneReadServices = @("Blob")
-          diagnosticSettings = @()
+          diagnosticSettings    = @()
         }
       ))
 
@@ -232,24 +235,27 @@ Describe "OwnerLens Light Azure helper logic" {
   It "formats storage diagnostic workspace ids as short portal links in table rows" {
     $rows = @(Get-OwnerLensStorageDiagnosticSettingRows -StorageAccounts @(
         [pscustomobject]@{
-          resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-          name = "st1"
+          resourceId         = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+          name               = "st1"
           diagnosticSettings = @(
             [pscustomobject]@{
-              service = "Blob"
-              status = "LogAnalytics"
-              dataAccessLogEnabled = $true
-              logAnalyticsEnabled = $true
+              service                = "Blob"
+              status                 = "LogAnalytics"
+              dataAccessLogEnabled   = $true
+              logAnalyticsEnabled    = $true
               diagnosticSettingNames = @("send-blob-logs")
-              workspaceIds = @("/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law")
-              resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1/blobServices/default"
+              workspaceIds           = @("/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law")
+              resourceId             = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1/blobServices/default"
             }
           )
         }
       ))
 
     $rows | Should -HaveCount 1
-    $rows[0].workspaceIds | Should -Be "[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law]rg-log/workspaces/law[/link]"
+    $rows[0].workspaceIds | Should -Be (
+      "[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law]" +
+      "rg-log/workspaces/law[/link]"
+    )
   }
 
   It "detects subscription Activity Log diagnostic settings to Log Analytics" {
@@ -267,15 +273,15 @@ Describe "OwnerLens Light Azure helper logic" {
 
     $rows = @(Get-OwnerLensActivityDiagnosticSettingRows -ActivityDiagnosticSettings @(
         [pscustomobject]@{
-          subscriptionId = "sub-1"
-          subscriptionName = "Sub One"
-          resourceId = "/subscriptions/sub-1"
-          status = "LogAnalytics"
-          activityLogEnabled = $true
-          logAnalyticsEnabled = $true
-          diagnosticSettingNames = @("send-activity")
-          workspaceIds = @("/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law")
-          storageAccountIds = @()
+          subscriptionId               = "sub-1"
+          subscriptionName             = "Sub One"
+          resourceId                   = "/subscriptions/sub-1"
+          status                       = "LogAnalytics"
+          activityLogEnabled           = $true
+          logAnalyticsEnabled          = $true
+          diagnosticSettingNames       = @("send-activity")
+          workspaceIds                 = @("/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law")
+          storageAccountIds            = @()
           eventHubAuthorizationRuleIds = @()
         }
       ))
@@ -286,7 +292,10 @@ Describe "OwnerLens Light Azure helper logic" {
     $rows[0].activityLogEnabled | Should -BeTrue
     $rows[0].logAnalyticsEnabled | Should -BeTrue
     $rows[0].diagnosticSettingNames | Should -Be "send-activity"
-    $rows[0].workspaceIds | Should -Be "[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law]rg-log/workspaces/law[/link]"
+    $rows[0].workspaceIds | Should -Be (
+      "[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law]" +
+      "rg-log/workspaces/law[/link]"
+    )
   }
 
   It "builds an Azure RBAC relationship tree rooted at the inspected service principal" {
@@ -296,124 +305,124 @@ Describe "OwnerLens Light Azure helper logic" {
     $scope = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
     $report = [pscustomobject]@{
       enterpriseApplication = [pscustomobject]@{
-        objectId = "sp-1"
-        appId = "app-1"
+        objectId    = "sp-1"
+        appId       = "app-1"
         displayName = "Payments Worker"
       }
-      meta = [pscustomobject]@{
+      meta                  = [pscustomobject]@{
         ownerTagConfiguration = [pscustomobject]@{
-          userOwnerTagNames = @("userOwner")
+          userOwnerTagNames  = @("userOwner")
           groupOwnerTagNames = @("teamOwner")
-          tagOwnerTagNames = @("owner")
+          tagOwnerTagNames   = @("owner")
         }
       }
-      azure = [pscustomobject]@{
-        roleAssignments = @(
+      azure                 = [pscustomobject]@{
+        roleAssignments          = @(
           [pscustomobject]@{
-            subscriptionName = "Sub One"
+            subscriptionName   = "Sub One"
             roleDefinitionName = "Storage Blob Data Reader"
-            scope = $scope
+            scope              = $scope
           }
         )
-        resourceDependencies = @(
+        resourceDependencies     = @(
           [pscustomobject]@{
             dependencyType = "Resource"
-            resourceId = $scope
-            resourceName = "st1"
-            resourceGroup = "rg-1"
-            resourceType = "Microsoft.Storage/storageAccounts"
-            tags = $tags
+            resourceId     = $scope
+            resourceName   = "st1"
+            resourceGroup  = "rg-1"
+            resourceType   = "Microsoft.Storage/storageAccounts"
+            tags           = $tags
           }
         )
         coAssignedRoleCandidates = @(
           [pscustomobject]@{
-            scope = $scope
-            principalId = "user-2"
-            principalType = "User"
-            principalDisplayName = "Payments Owner"
-            principalName = "payments.owner@example.com"
-            roleDefinitionName = "Contributor"
+            scope                 = $scope
+            principalId           = "user-2"
+            principalType         = "User"
+            principalDisplayName  = "Payments Owner"
+            principalName         = "payments.owner@example.com"
+            roleDefinitionName    = "Contributor"
             isStorageDataReadRole = $false
           }
           [pscustomobject]@{
-            scope = $scope
-            principalId = "user-2"
-            principalType = "User"
-            principalDisplayName = "Payments Owner"
-            principalName = "payments.owner@example.com"
-            roleDefinitionName = "Storage Blob Data Reader"
+            scope                 = $scope
+            principalId           = "user-2"
+            principalType         = "User"
+            principalDisplayName  = "Payments Owner"
+            principalName         = "payments.owner@example.com"
+            roleDefinitionName    = "Storage Blob Data Reader"
             isStorageDataReadRole = $true
           }
           [pscustomobject]@{
-            scope = $scope
-            principalId = "sp-2"
-            principalType = "ServicePrincipal"
-            principalDisplayName = "Publisher Agent"
-            principalName = ""
-            roleDefinitionName = "Storage Queue Data Message Processor"
+            scope                 = $scope
+            principalId           = "sp-2"
+            principalType         = "ServicePrincipal"
+            principalDisplayName  = "Publisher Agent"
+            principalName         = ""
+            roleDefinitionName    = "Storage Queue Data Message Processor"
             isStorageDataReadRole = $true
           }
         )
         rbacScopeActivityCallers = @(
           [pscustomobject]@{
-            callerKey = "object:user-1"
-            caller = "owner@example.com"
-            callerObjectId = "user-1"
-            callerAppId = "azure-portal-client-app"
-            callerName = "Owner User"
-            eventCount = 3
-            lastSeen = "2024-01-02T00:00:00Z"
-            rbacScopes = @($scope)
+            callerKey                        = "object:user-1"
+            caller                           = "owner@example.com"
+            callerObjectId                   = "user-1"
+            callerAppId                      = "azure-portal-client-app"
+            callerName                       = "Owner User"
+            eventCount                       = 3
+            lastSeen                         = "2024-01-02T00:00:00Z"
+            rbacScopes                       = @($scope)
             matchesInspectedServicePrincipal = $false
           },
           [pscustomobject]@{
-            callerKey = "object:sp-1"
-            caller = "app-client-1"
-            callerObjectId = "sp-1"
-            callerAppId = "app-client-1"
-            callerName = "Payments Worker"
-            eventCount = 4
-            lastSeen = "2024-01-03T00:00:00Z"
-            rbacScopes = @($scope)
+            callerKey                        = "object:sp-1"
+            caller                           = "app-client-1"
+            callerObjectId                   = "sp-1"
+            callerAppId                      = "app-client-1"
+            callerName                       = "Payments Worker"
+            eventCount                       = 4
+            lastSeen                         = "2024-01-03T00:00:00Z"
+            rbacScopes                       = @($scope)
             matchesInspectedServicePrincipal = $true
           }
         )
-        storageAccountsWithRbac = @(
+        storageAccountsWithRbac  = @(
           [pscustomobject]@{
-            resourceId = $scope
-            name = "st1"
-            resourceGroup = "rg-1"
-            location = "westeurope"
-            dataPlaneReadServices = @("Blob")
-            dataPlaneReadRoleNames = @("Storage Blob Data Reader")
-            rbacScopes = @($scope)
-            diagnosticLogEnabled = $true
+            resourceId                    = $scope
+            name                          = "st1"
+            resourceGroup                 = "rg-1"
+            location                      = "westeurope"
+            dataPlaneReadServices         = @("Blob")
+            dataPlaneReadRoleNames        = @("Storage Blob Data Reader")
+            rbacScopes                    = @($scope)
+            diagnosticLogEnabled          = $true
             diagnosticLogAnalyticsEnabled = $true
-            dataAccessVerificationStatus = "QueryableInLogAnalytics"
-            dataAccessVerificationReason = "Data-plane diagnostic logs are enabled to Log Analytics for every storage service covered by the inspected RBAC roles."
-            diagnosticSettings = @(
+            dataAccessVerificationStatus  = "QueryableInLogAnalytics"
+            dataAccessVerificationReason  = "Data-plane diagnostic logs are enabled to Log Analytics for every storage service covered by the inspected RBAC roles."
+            diagnosticSettings            = @(
               [pscustomobject]@{
-                service = "Blob"
-                resourceId = "$scope/blobServices/default"
-                status = "LogAnalytics"
-                dataAccessLogEnabled = $true
-                logAnalyticsEnabled = $true
+                service                = "Blob"
+                resourceId             = "$scope/blobServices/default"
+                status                 = "LogAnalytics"
+                dataAccessLogEnabled   = $true
+                logAnalyticsEnabled    = $true
                 diagnosticSettingNames = @("send-blob-logs")
-                workspaceIds = @("/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law")
+                workspaceIds           = @("/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law")
               }
             )
           }
         )
-        blobReadCallers = @(
+        blobReadCallers          = @(
           [pscustomobject]@{
-            requesterKey = "app:app-1"
-            requesterAppId = "app-1"
-            requesterUpn = ""
-            requesterType = "ServicePrincipal"
-            blobReadCount = 2
-            blobPublishCount = 1
-            blobAccessCount = 3
-            storageAccounts = @("st1")
+            requesterKey                     = "app:app-1"
+            requesterAppId                   = "app-1"
+            requesterUpn                     = ""
+            requesterType                    = "ServicePrincipal"
+            blobReadCount                    = 2
+            blobPublishCount                 = 1
+            blobAccessCount                  = 3
+            storageAccounts                  = @("st1")
             matchesInspectedServicePrincipal = $true
           }
         )
@@ -428,7 +437,10 @@ Describe "OwnerLens Light Azure helper logic" {
     $treeOutput | Should -Match "roles for inspected SP"
     $treeOutput | Should -Match "Storage Blob Data Reader"
     $treeOutput | Should -Match "other principals on same scope"
-    $tree.Children[0].Children[3].Name | Should -Match "other principals on same scope \(\[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1/users\]2\[/link\]\)"
+    $tree.Children[0].Children[3].Name | Should -Match (
+      "other principals on same scope \(\[link=https://portal.azure.com/#resource/" +
+      "subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1/users\]2\[/link\]\)"
+    )
     $coAssignedPrincipalNames = @($tree.Children[0].Children[3].Children | ForEach-Object { $_.Name })
     $coAssignedPrincipalNames | Should -Contain "[dim green]Publisher Agent (ServicePrincipal, id=sp-2, upn=unknown upn)[/]"
     $coAssignedPrincipalNames | Should -Contain "[bold green]Payments Owner (User, id=user-2, upn=payments.owner@example.com)[/]"
@@ -450,9 +462,18 @@ Describe "OwnerLens Light Azure helper logic" {
     $treeOutput | Should -Match "owner=payments-team"
     $tree.Children[0].Children[2].Children[0].Name | Should -Be "[green]owner=payments-team[/]"
 
-    $tree.Children[0].Name | Should -Match "\[blue\]Resource: \[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1\]st1\[/link\] \(Microsoft.Storage/storageAccounts, rg=rg-1\)\[/\]"
-    $tree.Children[0].Children[0].Name | Should -Match "\[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1\]/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1\[/link\]"
-    $tree.Children[0].Children[5].Children[0].Children[0].Name | Should -Match "\[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law\]rg-log/workspaces/law\[/link\]"
+    $tree.Children[0].Name | Should -Match (
+      "\[blue\]Resource: \[link=https://portal.azure.com/#resource/subscriptions/sub-1/" +
+      "resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1\]st1\[/link\] (Microsoft.Storage/storageAccounts, rg=rg-1)\[/\]"
+    )
+    $tree.Children[0].Children[0].Name | Should -Match (
+      "\[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-1/" +
+      "providers/Microsoft.Storage/storageAccounts/st1\]/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1\[/link\]"
+    )
+    $tree.Children[0].Children[5].Children[0].Children[0].Name | Should -Match (
+      "\[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-log/" +
+      "providers/Microsoft.OperationalInsights/workspaces/law\]rg-log/workspaces/law\[/link\]"
+    )
 
     $jsonReport = $report | ConvertTo-Json -Depth 40 | ConvertFrom-Json
     $jsonReport.enterpriseApplication.displayName | Should -Be "Payments Worker"
@@ -481,7 +502,10 @@ Describe "OwnerLens Light Azure helper logic" {
     $jsonReport.azure.storageAccountsWithRbac[0].resourceId | Should -Be $scope
     $jsonReport.azure.storageAccountsWithRbac[0].dataPlaneReadServices | Should -Contain "Blob"
     $jsonReport.azure.storageAccountsWithRbac[0].dataAccessVerificationStatus | Should -Be "QueryableInLogAnalytics"
-    $jsonReport.azure.storageAccountsWithRbac[0].diagnosticSettings[0].workspaceIds | Should -Contain "/subscriptions/sub-1/resourceGroups/rg-log/providers/Microsoft.OperationalInsights/workspaces/law"
+    $jsonReport.azure.storageAccountsWithRbac[0].diagnosticSettings[0].workspaceIds | Should -Contain (
+      "/subscriptions/sub-1/resourceGroups/rg-log/providers/" +
+      "Microsoft.OperationalInsights/workspaces/law"
+    )
 
     $jsonReport.azure.blobReadCallers[0].requesterAppId | Should -Be "app-1"
     $jsonReport.azure.blobReadCallers[0].requesterType | Should -Be "ServicePrincipal"
@@ -493,35 +517,35 @@ Describe "OwnerLens Light Azure helper logic" {
   It "summarizes blob data-plane participants" {
     $callers = @(Get-StorageBlobReadCallers -BlobReadEvidence @(
         [pscustomobject]@{
-          eventTimestamp = "2024-01-01T00:00:00Z"
-          storageAccountName = "st1"
-          operationName = "GetBlob"
-          accessDirection = "Read"
-          requesterObjectId = "user-1"
-          requesterAppId = ""
-          requesterTenantId = "tenant-1"
-          requesterUpn = "user@example.com"
-          requesterType = "User"
-          authenticationType = "OAuth"
-          callerIpAddress = "10.0.0.1"
-          userAgentHeader = "azcopy"
-          uri = "https://st1.blob.core.windows.net/c/a.txt"
+          eventTimestamp                   = "2024-01-01T00:00:00Z"
+          storageAccountName               = "st1"
+          operationName                    = "GetBlob"
+          accessDirection                  = "Read"
+          requesterObjectId                = "user-1"
+          requesterAppId                   = ""
+          requesterTenantId                = "tenant-1"
+          requesterUpn                     = "user@example.com"
+          requesterType                    = "User"
+          authenticationType               = "OAuth"
+          callerIpAddress                  = "10.0.0.1"
+          userAgentHeader                  = "azcopy"
+          uri                              = "https://st1.blob.core.windows.net/c/a.txt"
           matchesInspectedServicePrincipal = $false
         },
         [pscustomobject]@{
-          eventTimestamp = "2024-01-02T00:00:00Z"
-          storageAccountName = "st1"
-          operationName = "GetBlob"
-          accessDirection = "Read"
-          requesterObjectId = "user-1"
-          requesterAppId = ""
-          requesterTenantId = "tenant-1"
-          requesterUpn = "user@example.com"
-          requesterType = "User"
-          authenticationType = "OAuth"
-          callerIpAddress = "10.0.0.2"
-          userAgentHeader = "azcopy"
-          uri = "https://st1.blob.core.windows.net/c/b.txt"
+          eventTimestamp                   = "2024-01-02T00:00:00Z"
+          storageAccountName               = "st1"
+          operationName                    = "GetBlob"
+          accessDirection                  = "Read"
+          requesterObjectId                = "user-1"
+          requesterAppId                   = ""
+          requesterTenantId                = "tenant-1"
+          requesterUpn                     = "user@example.com"
+          requesterType                    = "User"
+          authenticationType               = "OAuth"
+          callerIpAddress                  = "10.0.0.2"
+          userAgentHeader                  = "azcopy"
+          uri                              = "https://st1.blob.core.windows.net/c/b.txt"
           matchesInspectedServicePrincipal = $false
         }
       ))
@@ -541,81 +565,81 @@ Describe "OwnerLens Light Azure helper logic" {
   It "summarizes who read each blob with first and last access times" {
     $objects = @(Get-StorageBlobReadObjects -BlobReadEvidence @(
         [pscustomobject]@{
-          eventTimestamp = "2024-01-01T00:00:00Z"
-          storageAccountName = "st1"
-          storageAccountResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-          operationName = "GetBlob"
-          accessDirection = "Read"
-          requesterObjectId = "user-1"
-          requesterAppId = ""
-          requesterTenantId = "tenant-1"
-          requesterUpn = "user@example.com"
-          requesterType = "User"
-          authenticationType = "OAuth"
-          callerIpAddress = "10.0.0.1"
-          userAgentHeader = "azcopy"
-          uri = "https://st1.blob.core.windows.net/c/a.txt"
-          objectKey = "/blobServices/default/containers/c/blobs/a.txt"
+          eventTimestamp                   = "2024-01-01T00:00:00Z"
+          storageAccountName               = "st1"
+          storageAccountResourceId         = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+          operationName                    = "GetBlob"
+          accessDirection                  = "Read"
+          requesterObjectId                = "user-1"
+          requesterAppId                   = ""
+          requesterTenantId                = "tenant-1"
+          requesterUpn                     = "user@example.com"
+          requesterType                    = "User"
+          authenticationType               = "OAuth"
+          callerIpAddress                  = "10.0.0.1"
+          userAgentHeader                  = "azcopy"
+          uri                              = "https://st1.blob.core.windows.net/c/a.txt"
+          objectKey                        = "/blobServices/default/containers/c/blobs/a.txt"
           matchesInspectedServicePrincipal = $false
         },
         [pscustomobject]@{
-          eventTimestamp = "2024-01-02T00:00:00Z"
-          storageAccountName = "st1"
-          storageAccountResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-          operationName = "GetBlob"
-          accessDirection = "Read"
-          requesterObjectId = "user-1"
-          requesterAppId = ""
-          requesterTenantId = "tenant-1"
-          requesterUpn = "user@example.com"
-          requesterType = "User"
-          authenticationType = "OAuth"
-          callerIpAddress = "10.0.0.2"
-          userAgentHeader = "azcopy"
-          uri = "https://st1.blob.core.windows.net/c/a.txt"
-          objectKey = "/blobServices/default/containers/c/blobs/a.txt"
+          eventTimestamp                   = "2024-01-02T00:00:00Z"
+          storageAccountName               = "st1"
+          storageAccountResourceId         = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+          operationName                    = "GetBlob"
+          accessDirection                  = "Read"
+          requesterObjectId                = "user-1"
+          requesterAppId                   = ""
+          requesterTenantId                = "tenant-1"
+          requesterUpn                     = "user@example.com"
+          requesterType                    = "User"
+          authenticationType               = "OAuth"
+          callerIpAddress                  = "10.0.0.2"
+          userAgentHeader                  = "azcopy"
+          uri                              = "https://st1.blob.core.windows.net/c/a.txt"
+          objectKey                        = "/blobServices/default/containers/c/blobs/a.txt"
           matchesInspectedServicePrincipal = $false
         },
         [pscustomobject]@{
-          eventTimestamp = "2024-01-03T00:00:00Z"
-          storageAccountName = "st1"
-          operationName = "PutBlockList"
-          accessDirection = "Publish"
-          requesterObjectId = "user-1"
-          requesterUpn = "user@example.com"
-          uri = "https://st1.blob.core.windows.net/c/a.txt"
-          objectKey = "/blobServices/default/containers/c/blobs/a.txt"
+          eventTimestamp                   = "2024-01-03T00:00:00Z"
+          storageAccountName               = "st1"
+          operationName                    = "PutBlockList"
+          accessDirection                  = "Publish"
+          requesterObjectId                = "user-1"
+          requesterUpn                     = "user@example.com"
+          uri                              = "https://st1.blob.core.windows.net/c/a.txt"
+          objectKey                        = "/blobServices/default/containers/c/blobs/a.txt"
           matchesInspectedServicePrincipal = $false
         },
         [pscustomobject]@{
-          eventTimestamp = "2024-01-04T00:00:00Z"
-          storageAccountName = "st1"
-          operationName = "GetBlob"
-          accessDirection = "Read"
-          requesterObjectId = "sp-1"
-          requesterAppId = "app-1"
-          requesterTenantId = "tenant-1"
-          requesterUpn = ""
-          requesterType = "ServicePrincipal"
-          authenticationType = "OAuth"
-          callerIpAddress = "10.0.0.3"
-          userAgentHeader = "agent"
-          uri = "https://st1.blob.core.windows.net/c/a.txt"
-          objectKey = "/blobServices/default/containers/c/blobs/a.txt"
+          eventTimestamp                   = "2024-01-04T00:00:00Z"
+          storageAccountName               = "st1"
+          operationName                    = "GetBlob"
+          accessDirection                  = "Read"
+          requesterObjectId                = "sp-1"
+          requesterAppId                   = "app-1"
+          requesterTenantId                = "tenant-1"
+          requesterUpn                     = ""
+          requesterType                    = "ServicePrincipal"
+          authenticationType               = "OAuth"
+          callerIpAddress                  = "10.0.0.3"
+          userAgentHeader                  = "agent"
+          uri                              = "https://st1.blob.core.windows.net/c/a.txt"
+          objectKey                        = "/blobServices/default/containers/c/blobs/a.txt"
           matchesInspectedServicePrincipal = $true
         }
       ))
 
     $objects | Should -HaveCount 2
 
-    $userRead = $objects | Where-Object requesterUpn -eq "user@example.com"
+    $userRead = $objects | Where-Object requesterUpn -EQ "user@example.com"
     $userRead.requesterBlobKey | Should -Be "object:user-1|upn:user@example.com|uri:https://st1.blob.core.windows.net/c/a.txt"
     $userRead.blobReadCount | Should -Be 2
     $userRead.firstReadAt | Should -Be "2024-01-01T00:00:00Z"
     $userRead.lastReadAt | Should -Be "2024-01-02T00:00:00Z"
     $userRead.callerIpAddresses | Should -HaveCount 2
 
-    $servicePrincipalRead = $objects | Where-Object requesterAppId -eq "app-1"
+    $servicePrincipalRead = $objects | Where-Object requesterAppId -EQ "app-1"
     $servicePrincipalRead.blobReadCount | Should -Be 1
     $servicePrincipalRead.matchesInspectedServicePrincipal | Should -BeTrue
   }
@@ -626,40 +650,40 @@ Describe "OwnerLens Light Azure helper logic" {
 
     $servicePrincipal = [pscustomobject]@{
       objectId = "sp-object-1"
-      appId = "agent-app-1"
+      appId    = "agent-app-1"
     }
 
     $callers = @(Get-StorageBlobReadCallers -BlobReadEvidence @(
         [pscustomobject]@{
-          eventTimestamp = "2024-01-01T00:00:00Z"
-          storageAccountName = "st1"
-          operationName = "PutBlockList"
-          accessDirection = "Publish"
-          requesterObjectId = "user-1"
-          requesterAppId = "upload-client-app"
-          requesterTenantId = "tenant-1"
-          requesterUpn = "user@example.com"
-          requesterType = "UserAndServicePrincipal"
-          authenticationType = "OAuth"
-          callerIpAddress = "10.0.0.1"
-          userAgentHeader = "agent-uploader"
-          uri = "https://st1.blob.core.windows.net/inbox/prompt.json"
+          eventTimestamp                   = "2024-01-01T00:00:00Z"
+          storageAccountName               = "st1"
+          operationName                    = "PutBlockList"
+          accessDirection                  = "Publish"
+          requesterObjectId                = "user-1"
+          requesterAppId                   = "upload-client-app"
+          requesterTenantId                = "tenant-1"
+          requesterUpn                     = "user@example.com"
+          requesterType                    = "UserAndServicePrincipal"
+          authenticationType               = "OAuth"
+          callerIpAddress                  = "10.0.0.1"
+          userAgentHeader                  = "agent-uploader"
+          uri                              = "https://st1.blob.core.windows.net/inbox/prompt.json"
           matchesInspectedServicePrincipal = $false
         },
         [pscustomobject]@{
-          eventTimestamp = "2024-01-01T00:05:00Z"
-          storageAccountName = "st1"
-          operationName = "GetBlob"
-          accessDirection = "Read"
-          requesterObjectId = "sp-object-1"
-          requesterAppId = "agent-app-1"
-          requesterTenantId = "tenant-1"
-          requesterUpn = ""
-          requesterType = "ServicePrincipal"
-          authenticationType = "OAuth"
-          callerIpAddress = "10.0.0.2"
-          userAgentHeader = "agent-runtime"
-          uri = "https://st1.blob.core.windows.net/inbox/prompt.json"
+          eventTimestamp                   = "2024-01-01T00:05:00Z"
+          storageAccountName               = "st1"
+          operationName                    = "GetBlob"
+          accessDirection                  = "Read"
+          requesterObjectId                = "sp-object-1"
+          requesterAppId                   = "agent-app-1"
+          requesterTenantId                = "tenant-1"
+          requesterUpn                     = ""
+          requesterType                    = "ServicePrincipal"
+          authenticationType               = "OAuth"
+          callerIpAddress                  = "10.0.0.2"
+          userAgentHeader                  = "agent-runtime"
+          uri                              = "https://st1.blob.core.windows.net/inbox/prompt.json"
           matchesInspectedServicePrincipal = (Test-StorageBlobRequesterMatchesServicePrincipal `
               -BlobAccess ([pscustomobject]@{ requesterObjectId = "sp-object-1"; requesterAppId = "agent-app-1" }) `
               -ServicePrincipal $servicePrincipal)
@@ -668,13 +692,13 @@ Describe "OwnerLens Light Azure helper logic" {
 
     $callers | Should -HaveCount 2
 
-    $publisher = $callers | Where-Object requesterUpn -eq "user@example.com"
+    $publisher = $callers | Where-Object requesterUpn -EQ "user@example.com"
     $publisher.requesterKey | Should -Be "object:user-1|app:upload-client-app|upn:user@example.com"
     $publisher.requesterType | Should -Be "UserAndServicePrincipal"
     $publisher.blobPublishCount | Should -Be 1
     $publisher.blobReadCount | Should -Be 0
 
-    $reader = $callers | Where-Object requesterAppId -eq "agent-app-1"
+    $reader = $callers | Where-Object requesterAppId -EQ "agent-app-1"
     $reader.requesterType | Should -Be "ServicePrincipal"
     $reader.blobReadCount | Should -Be 1
     $reader.blobPublishCount | Should -Be 0
@@ -684,27 +708,27 @@ Describe "OwnerLens Light Azure helper logic" {
   It "carries SAS generator identity into blob participant and object summaries" {
     $sasEvidence = @(
       [pscustomobject]@{
-        eventTimestamp = "2024-01-01T00:00:00Z"
-        storageAccountName = "st1"
-        storageAccountResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-        operationName = "GetBlob"
-        accessDirection = "Read"
-        requesterObjectId = ""
-        requesterAppId = ""
-        requesterTenantId = ""
-        requesterUpn = ""
-        requesterType = "Unknown"
-        authenticationType = "SAS"
-        sasGeneratorObjectId = "sas-user-1"
-        sasGeneratorAppId = "portal-app"
-        sasGeneratorTenantId = "tenant-1"
-        sasGeneratorUpn = "sas.owner@example.com"
-        sasSignedIdentifier = "readonly-policy"
-        sasExpiryStatus = ""
-        callerIpAddress = "10.0.0.4"
-        userAgentHeader = "browser"
-        uri = "https://st1.blob.core.windows.net/c/a.txt?skoid=sas-user-1&sktid=tenant-1&sp=r&se=2024-01-02T00%3A00%3A00Z"
-        objectKey = "/blobServices/default/containers/c/blobs/a.txt"
+        eventTimestamp                   = "2024-01-01T00:00:00Z"
+        storageAccountName               = "st1"
+        storageAccountResourceId         = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+        operationName                    = "GetBlob"
+        accessDirection                  = "Read"
+        requesterObjectId                = ""
+        requesterAppId                   = ""
+        requesterTenantId                = ""
+        requesterUpn                     = ""
+        requesterType                    = "Unknown"
+        authenticationType               = "SAS"
+        sasGeneratorObjectId             = "sas-user-1"
+        sasGeneratorAppId                = "portal-app"
+        sasGeneratorTenantId             = "tenant-1"
+        sasGeneratorUpn                  = "sas.owner@example.com"
+        sasSignedIdentifier              = "readonly-policy"
+        sasExpiryStatus                  = ""
+        callerIpAddress                  = "10.0.0.4"
+        userAgentHeader                  = "browser"
+        uri                              = "https://st1.blob.core.windows.net/c/a.txt?skoid=sas-user-1&sktid=tenant-1&sp=r&se=2024-01-02T00%3A00%3A00Z"
+        objectKey                        = "/blobServices/default/containers/c/blobs/a.txt"
         matchesInspectedServicePrincipal = $false
       }
     )
@@ -731,31 +755,31 @@ Describe "OwnerLens Light Azure helper logic" {
     Mock Invoke-LogAnalyticsQuery {
       return @(
         [pscustomobject]@{
-          TimeGenerated = "2024-01-01T00:00:00Z"
-          AccountName = "st1"
-          _ResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-          OperationName = "GetBlob"
-          StatusCode = "200"
-          StatusText = "Success"
-          AuthenticationType = "SAS"
-          AuthenticationHash = "hash"
-          SasExpiryStatus = ""
-          SasGeneratorObjectId = "sas-user-1"
-          SasGeneratorAppId = "portal-app"
-          SasGeneratorTenantId = "tenant-1"
-          SasGeneratorUpn = "sas.owner@example.com"
+          TimeGenerated              = "2024-01-01T00:00:00Z"
+          AccountName                = "st1"
+          _ResourceId                = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+          OperationName              = "GetBlob"
+          StatusCode                 = "200"
+          StatusText                 = "Success"
+          AuthenticationType         = "SAS"
+          AuthenticationHash         = "hash"
+          SasExpiryStatus            = ""
+          SasGeneratorObjectId       = "sas-user-1"
+          SasGeneratorAppId          = "portal-app"
+          SasGeneratorTenantId       = "tenant-1"
+          SasGeneratorUpn            = "sas.owner@example.com"
           SasGeneratorEventTimestamp = "2024-01-01T00:00:00Z"
-          SasExpiresOn = "2024-01-02T00%3A00%3A00Z"
-          SasSignedIdentifier = "readonly-policy"
-          SasSignedPermissions = "r"
-          RequesterObjectId = ""
-          RequesterAppId = ""
-          RequesterTenantId = ""
-          RequesterUpn = ""
-          CallerIpAddress = "10.0.0.4"
-          UserAgentHeader = "browser"
-          Uri = "https://st1.blob.core.windows.net/c/a.txt?skoid=sas-user-1&sktid=tenant-1&sp=r&si=readonly-policy&se=2024-01-02T00%3A00%3A00Z&sig=secret"
-          ObjectKey = "/blobServices/default/containers/c/blobs/a.txt"
+          SasExpiresOn               = "2024-01-02T00%3A00%3A00Z"
+          SasSignedIdentifier        = "readonly-policy"
+          SasSignedPermissions       = "r"
+          RequesterObjectId          = ""
+          RequesterAppId             = ""
+          RequesterTenantId          = ""
+          RequesterUpn               = ""
+          CallerIpAddress            = "10.0.0.4"
+          UserAgentHeader            = "browser"
+          Uri                        = "https://st1.blob.core.windows.net/c/a.txt?skoid=sas-user-1&sktid=tenant-1&sp=r&si=readonly-policy&se=2024-01-02T00%3A00%3A00Z&sig=secret"
+          ObjectKey                  = "/blobServices/default/containers/c/blobs/a.txt"
         }
       )
     }
@@ -763,9 +787,9 @@ Describe "OwnerLens Light Azure helper logic" {
     $evidence = @(Get-StorageBlobReadLogs `
         -WorkspaceId "workspace-1" `
         -StorageAccounts @([pscustomobject]@{
-            Name = "st1"
-            ResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-          }) `
+          Name       = "st1"
+          ResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+        }) `
         -StartTime ([datetime]"2024-01-01T00:00:00Z"))
 
     $evidence | Should -HaveCount 1
@@ -779,7 +803,7 @@ Describe "OwnerLens Light Azure helper logic" {
   }
 }
 
-Describe "Invoke-OwnerLensLight pipeline input" {
+Describe "Invoke-OwnerLensLite pipeline input" {
   BeforeEach {
     Mock Import-Module {}
     Mock Get-Command { [pscustomobject]@{ Name = $Name } }
@@ -787,47 +811,47 @@ Describe "Invoke-OwnerLensLight pipeline input" {
     Mock Get-AzContext { [pscustomobject]@{ Subscription = "sub-1" } }
     Mock Resolve-EnterpriseApplication {
       [pscustomobject]@{
-        objectId = "object-$EnterpriseApplication"
-        appId = "app-$EnterpriseApplication"
-        displayName = "App $EnterpriseApplication"
+        objectId       = "object-$EnterpriseApplication"
+        appId          = "app-$EnterpriseApplication"
+        displayName    = "App $EnterpriseApplication"
         accountEnabled = $true
       }
     }
     Mock Get-GraphDependencies {
       [pscustomobject]@{
-        owners = @()
-        appRoleAssignments = @()
-        oauth2PermissionGrants = @()
-        memberOf = @()
+        owners                    = @()
+        appRoleAssignments        = @()
+        oauth2PermissionGrants    = @()
+        memberOf                  = @()
         resourceServicePrincipals = @()
-        userSignIns = @()
+        userSignIns               = @()
       }
     }
     Mock Get-AzureDependencies {
       [pscustomobject]@{
-        requestedSubscriptions = @()
-        subscriptions = @()
-        roleAssignments = @()
-        coAssignedRoleCandidates = @()
-        resourceDependencies = @()
-        activityEvidence = @()
-        rbacScopeActivityEvidence = @()
-        rbacScopeActivityCallers = @()
+        requestedSubscriptions     = @()
+        subscriptions              = @()
+        roleAssignments            = @()
+        coAssignedRoleCandidates   = @()
+        resourceDependencies       = @()
+        activityEvidence           = @()
+        rbacScopeActivityEvidence  = @()
+        rbacScopeActivityCallers   = @()
         activityDiagnosticSettings = @()
-        storageAccountsWithRbac = @()
-        blobReadEvidence = @()
-        blobReadCallers = @()
-        blobReadObjects = @()
-        logAnalyticsWorkspaceId = ""
-        maxBlobReadRecords = 5000
-        activityStartTime = "2024-01-01T00:00:00.0000000Z"
+        storageAccountsWithRbac    = @()
+        blobReadEvidence           = @()
+        blobReadCallers            = @()
+        blobReadObjects            = @()
+        logAnalyticsWorkspaceId    = ""
+        maxBlobReadRecords         = 5000
+        activityStartTime          = "2024-01-01T00:00:00.0000000Z"
       }
     }
     Mock Format-DependencyReport {}
   }
 
   It "processes each Enterprise Application supplied through the pipeline" {
-    $reports = @("alpha", "beta" | Invoke-OwnerLensLight -SkipLogin -SkipActivityLogs)
+    $reports = @("alpha", "beta" | Invoke-OwnerLensLite -SkipLogin -SkipActivityLogs)
 
     $reports | Should -HaveCount 2
     $reports.enterpriseApplication.displayName | Should -Be @("App alpha", "App beta")
@@ -835,7 +859,7 @@ Describe "Invoke-OwnerLensLight pipeline input" {
   }
 }
 
-Describe "OwnerLens Light owner candidate table" {
+Describe "OwnerLensLite owner candidate table" {
   It "builds candidates with type, confidence, and evidence id" {
     $tags = [System.Collections.Generic.Dictionary[string, string]]::new()
     $tags["repoName"] = "super-learning-backend"
@@ -845,34 +869,34 @@ Describe "OwnerLens Light owner candidate table" {
       enterpriseApplication = [pscustomobject]@{
         objectId = "sp-1"
       }
-      graph = [pscustomobject]@{
-        owners = @(
+      graph                 = [pscustomobject]@{
+        owners   = @(
           [pscustomobject]@{
-            objectId = "user-1"
-            displayName = "Ada Lovelace"
+            objectId          = "user-1"
+            displayName       = "Ada Lovelace"
             userPrincipalName = "ada@example.com"
-            objectType = "#microsoft.graph.user"
+            objectType        = "#microsoft.graph.user"
           }
         )
         memberOf = @()
       }
-      azure = [pscustomobject]@{
+      azure                 = [pscustomobject]@{
         coAssignedRoleCandidates = @(
           [pscustomobject]@{
-            principalId = "group-1"
+            principalId          = "group-1"
             principalDisplayName = "App Owners"
-            principalType = "Group"
-            roleDefinitionName = "Contributor"
-            scope = "/subscriptions/sub-1/resourceGroups/rg-1"
+            principalType        = "Group"
+            roleDefinitionName   = "Contributor"
+            scope                = "/subscriptions/sub-1/resourceGroups/rg-1"
           }
         )
-        resourceDependencies = @(
+        resourceDependencies     = @(
           [pscustomobject]@{
             resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-            tags = $tags
+            tags       = $tags
           }
         )
-        activityEvidence = @()
+        activityEvidence         = @()
       }
     }
 
@@ -885,11 +909,11 @@ Describe "OwnerLens Light owner candidate table" {
     $candidates[0].relationship | Should -Be "Direct"
     $candidates[0].signal | Should -Be "OWNER"
     $candidates[0].evidenceId | Should -Be "/servicePrincipals/sp-1/owners/user-1"
-    ($candidates | Where-Object candidateType -eq "Tag").evidenceId | Should -Be "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-    ($candidates | Where-Object candidateType -eq "Tag").candidate | Should -Be "costCenter=cc-42"
-    ($candidates | Where-Object candidateType -eq "Tag").relationship | Should -Be "Indirect"
-    ($candidates | Where-Object candidateType -eq "Tag").signal | Should -Be "RBAC"
-    ($candidates | Where-Object candidate -eq "repoName=super-learning-backend") | Should -HaveCount 0
+    ($candidates | Where-Object candidateType -EQ "Tag").evidenceId | Should -Be "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+    ($candidates | Where-Object candidateType -EQ "Tag").candidate | Should -Be "costCenter=cc-42"
+    ($candidates | Where-Object candidateType -EQ "Tag").relationship | Should -Be "Indirect"
+    ($candidates | Where-Object candidateType -EQ "Tag").signal | Should -Be "RBAC"
+    ($candidates | Where-Object candidate -EQ "repoName=super-learning-backend") | Should -HaveCount 0
   }
 
   It "uses configured tag names for user, group, and generic tag owner candidates" {
@@ -902,21 +926,21 @@ Describe "OwnerLens Light owner candidate table" {
     $report = [pscustomobject]@{
       enterpriseApplication = [pscustomobject]@{
         objectId = "sp-1"
-        tags = @("ownerMail=direct-owner@example.com", "repoName=direct-repo")
+        tags     = @("ownerMail=direct-owner@example.com", "repoName=direct-repo")
       }
-      graph = [pscustomobject]@{
-        owners = @()
+      graph                 = [pscustomobject]@{
+        owners   = @()
         memberOf = @()
       }
-      azure = [pscustomobject]@{
+      azure                 = [pscustomobject]@{
         coAssignedRoleCandidates = @()
-        resourceDependencies = @(
+        resourceDependencies     = @(
           [pscustomobject]@{
             resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app-1"
-            tags = $resourceTags
+            tags       = $resourceTags
           }
         )
-        activityEvidence = @()
+        activityEvidence         = @()
       }
     }
 
@@ -962,14 +986,14 @@ Describe "OwnerLens Light owner candidate table" {
       enterpriseApplication = [pscustomobject]@{
         objectId = "sp-1"
       }
-      graph = [pscustomobject]@{
-        owners = @()
+      graph                 = [pscustomobject]@{
+        owners   = @()
         memberOf = @()
       }
-      azure = [pscustomobject]@{
+      azure                 = [pscustomobject]@{
         coAssignedRoleCandidates = @()
-        resourceDependencies = @()
-        activityEvidence = @()
+        resourceDependencies     = @()
+        activityEvidence         = @()
       }
     }
 
@@ -986,12 +1010,12 @@ Describe "OwnerLens Light owner candidate table" {
   It "formats the candidate output as TSV with relationship and signal, without evidence type" {
     $table = Format-OwnerCandidateTable -Candidates @(
       [pscustomobject]@{
-        candidate = "repoName=super-learning-backend"
+        candidate     = "repoName=super-learning-backend"
         candidateType = "Tag"
-        confidence = "MED"
-        relationship = "Indirect"
-        signal = "RBAC"
-        evidenceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+        confidence    = "MED"
+        relationship  = "Indirect"
+        signal        = "RBAC"
+        evidenceId    = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
       }
     )
 
@@ -1008,23 +1032,23 @@ Describe "OwnerLens Light owner candidate table" {
       enterpriseApplication = [pscustomobject]@{
         objectId = "sp-1"
       }
-      graph = [pscustomobject]@{
-        owners = @()
+      graph                 = [pscustomobject]@{
+        owners   = @()
         memberOf = @()
       }
-      azure = [pscustomobject]@{
+      azure                 = [pscustomobject]@{
         coAssignedRoleCandidates = @(
           [pscustomobject]@{
-            principalId = "user-1"
-            principalName = "owner@example.com"
+            principalId          = "user-1"
+            principalName        = "owner@example.com"
             principalDisplayName = "Owner Person"
-            principalType = "User"
-            roleDefinitionName = "Contributor"
-            scope = "/subscriptions/sub-1/resourceGroups/rg-1"
+            principalType        = "User"
+            roleDefinitionName   = "Contributor"
+            scope                = "/subscriptions/sub-1/resourceGroups/rg-1"
           }
         )
-        resourceDependencies = @()
-        activityEvidence = @()
+        resourceDependencies     = @()
+        activityEvidence         = @()
       }
     }
 
@@ -1040,24 +1064,24 @@ Describe "OwnerLens Light owner candidate table" {
       enterpriseApplication = [pscustomobject]@{
         objectId = "sp-1"
       }
-      graph = [pscustomobject]@{
-        owners = @()
+      graph                 = [pscustomobject]@{
+        owners   = @()
         memberOf = @()
       }
-      azure = [pscustomobject]@{
+      azure                 = [pscustomobject]@{
         coAssignedRoleCandidates = @(
           [pscustomobject]@{
-            principalId = "user-1"
-            principalName = "reader@example.com"
-            principalDisplayName = "Storage Reader"
-            principalType = "User"
-            roleDefinitionName = "Storage Blob Data Reader"
+            principalId           = "user-1"
+            principalName         = "reader@example.com"
+            principalDisplayName  = "Storage Reader"
+            principalType         = "User"
+            roleDefinitionName    = "Storage Blob Data Reader"
             isStorageDataReadRole = $true
-            scope = $scope
+            scope                 = $scope
           }
         )
-        resourceDependencies = @()
-        activityEvidence = @()
+        resourceDependencies     = @()
+        activityEvidence         = @()
       }
     }
 
@@ -1076,36 +1100,36 @@ Describe "OwnerLens Light owner candidate table" {
       enterpriseApplication = [pscustomobject]@{
         objectId = "sp-1"
       }
-      graph = [pscustomobject]@{
-        owners = @()
+      graph                 = [pscustomobject]@{
+        owners   = @()
         memberOf = @()
       }
-      azure = [pscustomobject]@{
+      azure                 = [pscustomobject]@{
         coAssignedRoleCandidates = @()
-        resourceDependencies = @()
-        activityEvidence = @()
-        blobReadEvidence = @(
+        resourceDependencies     = @()
+        activityEvidence         = @()
+        blobReadEvidence         = @(
           [pscustomobject]@{
-            eventTimestamp = "2024-01-01T00:00:00Z"
+            eventTimestamp           = "2024-01-01T00:00:00Z"
             storageAccountResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-            operationName = "GetBlob"
-            authenticationType = "SAS"
-            sasGeneratorObjectId = "sas-user-1"
-            sasGeneratorAppId = "portal-app"
-            sasGeneratorUpn = "sas.owner@example.com"
-            sasSignedPermissions = "r"
-            uri = "https://st1.blob.core.windows.net/c/a.txt?skoid=sas-user-1"
+            operationName            = "GetBlob"
+            authenticationType       = "SAS"
+            sasGeneratorObjectId     = "sas-user-1"
+            sasGeneratorAppId        = "portal-app"
+            sasGeneratorUpn          = "sas.owner@example.com"
+            sasSignedPermissions     = "r"
+            uri                      = "https://st1.blob.core.windows.net/c/a.txt?skoid=sas-user-1"
           },
           [pscustomobject]@{
-            eventTimestamp = "2024-01-02T00:00:00Z"
+            eventTimestamp           = "2024-01-02T00:00:00Z"
             storageAccountResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-            operationName = "GetBlob"
-            authenticationType = "SAS"
-            sasGeneratorObjectId = "sas-user-1"
-            sasGeneratorAppId = "portal-app"
-            sasGeneratorUpn = "sas.owner@example.com"
-            sasSignedPermissions = "r"
-            uri = "https://st1.blob.core.windows.net/c/b.txt?skoid=sas-user-1"
+            operationName            = "GetBlob"
+            authenticationType       = "SAS"
+            sasGeneratorObjectId     = "sas-user-1"
+            sasGeneratorAppId        = "portal-app"
+            sasGeneratorUpn          = "sas.owner@example.com"
+            sasSignedPermissions     = "r"
+            uri                      = "https://st1.blob.core.windows.net/c/b.txt?skoid=sas-user-1"
           }
         )
       }
@@ -1128,29 +1152,29 @@ Describe "OwnerLens Light owner candidate table" {
       enterpriseApplication = [pscustomobject]@{
         objectId = "sp-1"
       }
-      graph = [pscustomobject]@{
-        owners = @()
+      graph                 = [pscustomobject]@{
+        owners   = @()
         memberOf = @()
       }
-      azure = [pscustomobject]@{
+      azure                 = [pscustomobject]@{
         coAssignedRoleCandidates = @()
-        resourceDependencies = @()
-        activityEvidence = @()
+        resourceDependencies     = @()
+        activityEvidence         = @()
         rbacScopeActivityCallers = @(
           [pscustomobject]@{
-            callerKey = "object:user-1"
-            caller = "owner@example.com"
-            callerObjectId = "user-1"
-            callerAppId = "azure-portal-client-app"
-            callerName = "Owner User"
-            eventCount = 3
-            firstSeen = "2024-01-01T00:00:00Z"
-            lastSeen = "2024-01-02T00:00:00Z"
-            rbacScopes = @($scope)
+            callerKey                        = "object:user-1"
+            caller                           = "owner@example.com"
+            callerObjectId                   = "user-1"
+            callerAppId                      = "azure-portal-client-app"
+            callerName                       = "Owner User"
+            eventCount                       = 3
+            firstSeen                        = "2024-01-01T00:00:00Z"
+            lastSeen                         = "2024-01-02T00:00:00Z"
+            rbacScopes                       = @($scope)
             matchesInspectedServicePrincipal = $false
           }
         )
-        blobReadEvidence = @()
+        blobReadEvidence         = @()
       }
     }
 
@@ -1171,23 +1195,23 @@ Describe "OwnerLens Light owner candidate table" {
       enterpriseApplication = [pscustomobject]@{
         objectId = "sp-1"
       }
-      graph = [pscustomobject]@{
-        owners = @()
+      graph                 = [pscustomobject]@{
+        owners   = @()
         memberOf = @()
       }
-      azure = [pscustomobject]@{
+      azure                 = [pscustomobject]@{
         coAssignedRoleCandidates = @(
           [pscustomobject]@{
-            principalId = "31b109c6-6aa2-4cba-84c6-879bb3d8656e"
-            principalName = ""
+            principalId          = "31b109c6-6aa2-4cba-84c6-879bb3d8656e"
+            principalName        = ""
             principalDisplayName = ""
-            principalType = ""
-            roleDefinitionName = "Reader"
-            scope = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+            principalType        = ""
+            roleDefinitionName   = "Reader"
+            scope                = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
           }
         )
-        resourceDependencies = @()
-        activityEvidence = @()
+        resourceDependencies     = @()
+        activityEvidence         = @()
       }
     }
 
@@ -1199,7 +1223,7 @@ Describe "OwnerLens Light owner candidate table" {
   }
 }
 
-Describe "OwnerLens Light owner candidate integration" {
+Describe "OwnerLensLite owner candidate integration" {
   BeforeEach {
     Mock Import-Module {}
     Mock Get-Command { [pscustomobject]@{ Name = $Name } }
@@ -1209,46 +1233,46 @@ Describe "OwnerLens Light owner candidate integration" {
 
     Mock Resolve-EnterpriseApplication {
       [pscustomobject]@{
-        objectId = "sp-1"
+        objectId            = "sp-1"
         applicationObjectId = "app-object-1"
-        appId = "app-client-1"
-        displayName = "Payments Worker"
-        accountEnabled = $true
-        tags = @("owner=platform-from-enterprise-app")
+        appId               = "app-client-1"
+        displayName         = "Payments Worker"
+        accountEnabled      = $true
+        tags                = @("owner=platform-from-enterprise-app")
       }
     }
 
     Mock Get-GraphDependencies {
       [pscustomobject]@{
-        owners = @(
+        owners                    = @(
           [pscustomobject]@{
-            objectId = "sp-user-owner-1"
-            displayName = "Service Principal User Owner"
+            objectId          = "sp-user-owner-1"
+            displayName       = "Service Principal User Owner"
             userPrincipalName = "sp.user.owner@example.com"
-            mail = "sp.user.owner@example.com"
-            objectType = "#microsoft.graph.user"
-            ownerSource = "ServicePrincipal"
+            mail              = "sp.user.owner@example.com"
+            objectType        = "#microsoft.graph.user"
+            ownerSource       = "ServicePrincipal"
           },
           [pscustomobject]@{
-            objectId = "app-user-owner-1"
-            displayName = "Application User Owner"
+            objectId          = "app-user-owner-1"
+            displayName       = "Application User Owner"
             userPrincipalName = "app.user.owner@example.com"
-            mail = "app.user.owner@example.com"
-            objectType = "#microsoft.graph.user"
-            ownerSource = "Application"
+            mail              = "app.user.owner@example.com"
+            objectType        = "#microsoft.graph.user"
+            ownerSource       = "Application"
           }
         )
-        appRoleAssignments = @()
-        oauth2PermissionGrants = @()
-        memberOf = @(
+        appRoleAssignments        = @()
+        oauth2PermissionGrants    = @()
+        memberOf                  = @(
           [pscustomobject]@{
-            objectId = "member-group-1"
+            objectId    = "member-group-1"
             displayName = "Payments Operators"
-            objectType = "#microsoft.graph.group"
+            objectType  = "#microsoft.graph.group"
           }
         )
         resourceServicePrincipals = @()
-        userSignIns = @()
+        userSignIns               = @()
       }
     }
 
@@ -1258,41 +1282,41 @@ Describe "OwnerLens Light owner candidate integration" {
 
     Mock Get-AzureDependencies {
       [pscustomobject]@{
-        requestedSubscriptions = @("sub-1")
-        subscriptions = @()
-        roleAssignments = @()
-        coAssignedRoleCandidates = @(
+        requestedSubscriptions     = @("sub-1")
+        subscriptions              = @()
+        roleAssignments            = @()
+        coAssignedRoleCandidates   = @(
           [pscustomobject]@{
-            principalId = "rbac-group-1"
+            principalId          = "rbac-group-1"
             principalDisplayName = "Payments Contributors"
-            principalType = "Group"
-            roleDefinitionName = "Contributor"
-            scope = "/subscriptions/sub-1/resourceGroups/rg-payments"
+            principalType        = "Group"
+            roleDefinitionName   = "Contributor"
+            scope                = "/subscriptions/sub-1/resourceGroups/rg-payments"
           }
         )
-        resourceDependencies = @(
+        resourceDependencies       = @(
           [pscustomobject]@{
             resourceId = "/subscriptions/sub-1/resourceGroups/rg-payments/providers/Microsoft.Web/sites/payments-worker"
-            tags = $resourceTags
+            tags       = $resourceTags
           }
         )
-        activityEvidence = @()
-        rbacScopeActivityEvidence = @()
-        rbacScopeActivityCallers = @()
+        activityEvidence           = @()
+        rbacScopeActivityEvidence  = @()
+        rbacScopeActivityCallers   = @()
         activityDiagnosticSettings = @()
-        storageAccountsWithRbac = @()
-        blobReadEvidence = @()
-        blobReadCallers = @()
-        blobReadObjects = @()
-        logAnalyticsWorkspaceId = ""
-        maxBlobReadRecords = 5000
-        activityStartTime = "2024-01-01T00:00:00.0000000Z"
+        storageAccountsWithRbac    = @()
+        blobReadEvidence           = @()
+        blobReadCallers            = @()
+        blobReadObjects            = @()
+        logAnalyticsWorkspaceId    = ""
+        maxBlobReadRecords         = 5000
+        activityStartTime          = "2024-01-01T00:00:00.0000000Z"
       }
     }
   }
 
   It "finds service principal owner, application owner, direct tag, indirect tags, membership group, and RBAC group" {
-    $report = Invoke-OwnerLensLight -EnterpriseApplication "Payments Worker" -SkipLogin -SkipActivityLogs
+    $report = Invoke-OwnerLensLite -EnterpriseApplication "Payments Worker" -SkipLogin -SkipActivityLogs
 
     $report.ownerCandidates | Where-Object {
       $_.candidate -eq "sp.user.owner@example.com" -and
@@ -1340,7 +1364,7 @@ Describe "OwnerLens Light owner candidate integration" {
   }
 }
 
-Describe "OwnerLens Light Microsoft Graph application owner discovery" {
+Describe "OwnerLensLite Microsoft Graph application owner discovery" {
   It "loads owners from the application object when applicationObjectId is available" {
     Mock Invoke-GraphPagedRequest {
       switch -Wildcard ($Uri) {
@@ -1350,11 +1374,11 @@ Describe "OwnerLens Light Microsoft Graph application owner discovery" {
         "/v1.0/applications/app-object-1/owners*" {
           return @(
             [pscustomobject]@{
-              id = "app-user-owner-1"
-              displayName = "Application User Owner"
+              id                = "app-user-owner-1"
+              displayName       = "Application User Owner"
               userPrincipalName = "app.user.owner@example.com"
-              mail = "app.user.owner@example.com"
-              "@odata.type" = "#microsoft.graph.user"
+              mail              = "app.user.owner@example.com"
+              "@odata.type"     = "#microsoft.graph.user"
             }
           )
         }
@@ -1366,7 +1390,7 @@ Describe "OwnerLens Light Microsoft Graph application owner discovery" {
     Mock Invoke-RestRequestWithRetry {}
 
     $dependencies = Get-GraphDependencies -ServicePrincipal ([pscustomobject]@{
-        objectId = "sp-1"
+        objectId            = "sp-1"
         applicationObjectId = "app-object-1"
       })
 
@@ -1386,37 +1410,37 @@ Describe "OwnerLens Light Microsoft Graph application owner discovery" {
         "/v1.0/auditLogs/signIns*" {
           return @(
             [pscustomobject]@{
-              id = "sign-in-1"
-              createdDateTime = "2024-01-02T00:00:00Z"
-              userId = "user-1"
-              userPrincipalName = "owner@example.com"
-              userDisplayName = "Owner User"
-              appId = "client-app-1"
-              appDisplayName = "Azure Portal"
-              ipAddress = "198.51.100.10"
-              location = [pscustomobject]@{
-                city = "Warsaw"
-                state = "Mazowieckie"
+              id                      = "sign-in-1"
+              createdDateTime         = "2024-01-02T00:00:00Z"
+              userId                  = "user-1"
+              userPrincipalName       = "owner@example.com"
+              userDisplayName         = "Owner User"
+              appId                   = "client-app-1"
+              appDisplayName          = "Azure Portal"
+              ipAddress               = "198.51.100.10"
+              location                = [pscustomobject]@{
+                city            = "Warsaw"
+                state           = "Mazowieckie"
                 countryOrRegion = "PL"
               }
-              clientAppUsed = "Browser"
+              clientAppUsed           = "Browser"
               conditionalAccessStatus = "success"
-              status = [pscustomobject]@{
-                errorCode = 0
+              status                  = [pscustomobject]@{
+                errorCode     = 0
                 failureReason = ""
               }
-              resourceDisplayName = "Windows Azure Service Management API"
-              resourceId = "resource-1"
-              correlationId = "correlation-1"
+              resourceDisplayName     = "Windows Azure Service Management API"
+              resourceId              = "resource-1"
+              correlationId           = "correlation-1"
             },
             [pscustomobject]@{
-              id = "sign-in-2"
-              createdDateTime = "2024-01-01T00:00:00Z"
-              userId = "user-1"
+              id                = "sign-in-2"
+              createdDateTime   = "2024-01-01T00:00:00Z"
+              userId            = "user-1"
               userPrincipalName = "owner@example.com"
-              appDisplayName = "Azure CLI"
-              status = [pscustomobject]@{
-                errorCode = 50058
+              appDisplayName    = "Azure CLI"
+              status            = [pscustomobject]@{
+                errorCode     = 50058
                 failureReason = "User session missing."
               }
             }
@@ -1454,25 +1478,25 @@ Describe "OwnerLens Light Microsoft Graph application owner discovery" {
   It "summarizes user sign-in locations" {
     $rows = @(Get-OwnerLensUserSignInLocationRows -UserSignIns @(
         [pscustomobject]@{
-          createdDateTime = "2024-01-01T00:00:00Z"
+          createdDateTime         = "2024-01-01T00:00:00Z"
           locationCountryOrRegion = "PL"
-          locationState = "Mazowieckie"
-          locationCity = "Warsaw"
-          ipAddress = "198.51.100.10"
+          locationState           = "Mazowieckie"
+          locationCity            = "Warsaw"
+          ipAddress               = "198.51.100.10"
         },
         [pscustomobject]@{
-          createdDateTime = "2024-01-02T00:00:00Z"
+          createdDateTime         = "2024-01-02T00:00:00Z"
           locationCountryOrRegion = "PL"
-          locationState = "Mazowieckie"
-          locationCity = "Warsaw"
-          ipAddress = "198.51.100.10"
+          locationState           = "Mazowieckie"
+          locationCity            = "Warsaw"
+          ipAddress               = "198.51.100.10"
         },
         [pscustomobject]@{
-          createdDateTime = "2024-01-03T00:00:00Z"
+          createdDateTime         = "2024-01-03T00:00:00Z"
           locationCountryOrRegion = ""
-          locationState = ""
-          locationCity = ""
-          ipAddress = ""
+          locationState           = ""
+          locationCity            = ""
+          ipAddress               = ""
         }
       ))
 
@@ -1496,9 +1520,9 @@ Describe "OwnerLens Light Microsoft Graph application owner discovery" {
         -MaxRetryCount 3 `
         -RetryDelaySeconds 0 `
         -Request {
-          $script:attempts += 1
-          throw "Response status code does not indicate success: 403 (Forbidden)."
-        }
+        $script:attempts += 1
+        throw "Response status code does not indicate success: 403 (Forbidden)."
+      }
     } | Should -Throw
 
     $script:attempts | Should -Be 1
@@ -1510,8 +1534,8 @@ Describe "OwnerLens Light Microsoft Graph application owner discovery" {
 
     Mock Invoke-RestRequestWithRetry {
       [pscustomobject]@{
-        id = $objectId
-        appId = $appId
+        id          = $objectId
+        appId       = $appId
         displayName = "App One"
       }
     }
@@ -1520,8 +1544,8 @@ Describe "OwnerLens Light Microsoft Graph application owner discovery" {
       if ($Uri -like "/v1.0/servicePrincipals*") {
         return @(
           [pscustomobject]@{
-            id = $objectId
-            appId = $appId
+            id          = $objectId
+            appId       = $appId
             displayName = "App One"
           }
         )
@@ -1550,10 +1574,10 @@ Describe "OwnerLens Light Microsoft Graph application owner discovery" {
     Mock Get-AzSubscription {
       @(
         [pscustomobject]@{
-          Id = "sub-1"
-          Name = "Sub One"
+          Id       = "sub-1"
+          Name     = "Sub One"
           TenantId = "tenant-1"
-          State = "Enabled"
+          State    = "Enabled"
         }
       )
     }

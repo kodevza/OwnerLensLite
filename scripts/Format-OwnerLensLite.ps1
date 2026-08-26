@@ -72,7 +72,7 @@ foreach ($file in $files) {
 if ($unformattedFiles.Count -gt 0) {
   $formattedFileList = $unformattedFiles -join ', '
   $formattingMessage = "PowerShell formatting is required for: $formattedFileList."
-  $formattingMessage += ' Run ./scripts/Format-OwnerLensLight.ps1, then stage the updated files.'
+  $formattingMessage += ' Run ./scripts/Format-OwnerLensLite.ps1, then stage the updated files.'
   Write-Error $formattingMessage
 }
 

@@ -1,15 +1,15 @@
 BeforeAll {
-  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLightTestFunctions.ps1")
+  . (Join-Path $PSScriptRoot "../Support/Import-OwnerLensLiteTestFunctions.ps1")
 }
 
 Describe "OwnerLens Storage Diagnostic Settings table" {
   It "generates table rows for missing diagnostic settings" {
     $rows = @(Get-OwnerLensStorageDiagnosticSettingsTableRows -StorageAccounts @(
         [pscustomobject]@{
-          resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-          name = "st1"
+          resourceId            = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+          name                  = "st1"
           dataPlaneReadServices = @("Blob")
-          diagnosticSettings = @()
+          diagnosticSettings    = @()
         }
       ))
 
