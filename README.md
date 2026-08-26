@@ -2,6 +2,8 @@
 
 OwnerLensLite is a local PowerShell tool for inspecting one Microsoft Entra Enterprise Application / service principal and building an evidence-backed ownership and dependency view across Microsoft Graph and Azure.
 
+![OwnerLensLite demo](demo.gif)
+
 It is designed to answer:
 
 - Where does this service principal have Azure access?
