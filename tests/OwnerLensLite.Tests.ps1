@@ -486,9 +486,9 @@ Describe "OwnerLensLite Azure helper logic" {
     $treeOutput | Should -Match "owner=payments-team"
     $tree.Children[0].Children[2].Children[0].Name | Should -Be "[green]owner=payments-team[/]"
 
-    $tree.Children[0].Name | Should -Match (
-      "\[blue\]Resource: \[link=https://portal.azure.com/#resource/subscriptions/sub-1/" +
-      "resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1\]st1\[/link\] (Microsoft.Storage/storageAccounts, rg=rg-1)\[/\]"
+    $tree.Children[0].Name | Should -Be (
+      "[blue]Resource: [link=https://portal.azure.com/#resource/subscriptions/sub-1/" +
+      "resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1]st1[/link] (Microsoft.Storage/storageAccounts, rg=rg-1)[/]"
     )
     $tree.Children[0].Children[0].Name | Should -Match (
       "\[link=https://portal.azure.com/#resource/subscriptions/sub-1/resourceGroups/rg-1/" +
