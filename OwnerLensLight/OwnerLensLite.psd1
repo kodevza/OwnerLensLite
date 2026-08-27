@@ -5,7 +5,7 @@
   Author               = 'OwnerLens'
   CompanyName          = 'OwnerLens'
   Copyright            = '(c) OwnerLens contributors. All rights reserved.'
-  Description          = 'Lightweight local Enterprise Application dependency evidence workflow for Azure and Microsoft Entra.'
+  Description          = 'Evidence-backed ownership and dependency assessment for Microsoft Entra service principals across Microsoft Graph, Azure RBAC, Activity Logs, and Azure Storage.'
   PowerShellVersion    = '7.0'
   CompatiblePSEditions = @('Core')
   RequiredModules      = @(
@@ -25,10 +25,10 @@
     Name   = 'OwnerLens Lite'
     PSData = @{
       Prerelease   = 'preview1'
-      Tags         = @('OwnerLens', 'Azure', 'Entra', 'EnterpriseApplication', 'ServicePrincipal', 'Preview')
+      Tags         = @('Azure', 'MicrosoftGraph', 'MicrosoftEntra', 'ServicePrincipal', 'AzureRBAC', 'IdentitySecurity', 'AccessGovernance', 'Ownership', 'DependencyAnalysis', 'Preview')
       LicenseUri   = 'https://www.apache.org/licenses/LICENSE-2.0'
       ProjectUri   = 'https://github.com/kodevza/ownerlenslite'
-      ReleaseNotes = 'Initial preview release of the lightweight OwnerLens Enterprise Application dependency inspector.'
+      ReleaseNotes = 'Preview release for evidence-backed ownership discovery and dependency analysis of Microsoft Entra service principals across Microsoft Graph and Azure.'
     }
   }
 }

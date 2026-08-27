@@ -1,6 +1,10 @@
 # OwnerLensLite
 
-OwnerLensLite is a local PowerShell tool for inspecting one Microsoft Entra Enterprise Application / service principal and building an evidence-backed ownership and dependency view across Microsoft Graph and Azure.
+OwnerLensLite is a local PowerShell module for building an evidence-backed ownership and dependency assessment for a Microsoft Entra Enterprise Application (service principal). It correlates Microsoft Graph relationships with Azure RBAC, Activity Log, and optional Azure Storage data-plane evidence so that every reported ownership candidate is traceable to its source.
+
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/OwnerLensLite?label=PowerShell%20Gallery)](https://www.powershellgallery.com/packages/OwnerLensLite)
+[![PowerShell Gallery downloads](https://img.shields.io/powershellgallery/dt/OwnerLensLite?label=downloads)](https://www.powershellgallery.com/packages/OwnerLensLite)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 ![OwnerLensLite demo](demo.gif)
 
@@ -781,3 +785,10 @@ Invoke-OwnerLensLite `
 ```powershell
 Invoke-Pester ./tests
 ```
+
+# References
+
+- [Microsoft Graph servicePrincipal resource type](https://learn.microsoft.com/graph/api/resources/serviceprincipal?view=graph-rest-1.0) and [application resource type](https://learn.microsoft.com/graph/api/resources/application?view=graph-rest-1.0)
+- [Azure built-in roles](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles) and [Azure RBAC overview](https://learn.microsoft.com/azure/role-based-access-control/overview)
+- [Azure Activity Log](https://learn.microsoft.com/azure/azure-monitor/essentials/activity-log) and [diagnostic settings](https://learn.microsoft.com/azure/azure-monitor/essentials/diagnostic-settings)
+- [Azure Blob Storage monitoring data reference](https://learn.microsoft.com/azure/storage/blobs/monitor-blob-storage-reference)
