@@ -21,15 +21,18 @@ OwnerLensLite does **not** treat the nearest human as the owner. Explicit owners
 - `PwshRichLite` 0.1.0+
 
 ```powershell
+# OwnerLensLite is distributed through the PowerShell Gallery.
+Install-Module OwnerLensLite -Scope CurrentUser
+
+# Install these runtime dependencies if they are not already available.
 Install-Module Az -Scope CurrentUser
 Install-Module Microsoft.Graph -Scope CurrentUser
-Install-Module PwshRichLite -Scope CurrentUser
 ```
 
 ## Quick start
 
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
+Invoke-OwnerLensLite `
   -EnterpriseApplication "<service-principal-object-id-or-app-id>"
 ```
 
@@ -42,7 +45,7 @@ Install-Module PwshRichLite -Scope CurrentUser
 Scan explicit subscriptions:
 
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
+Invoke-OwnerLensLite `
   -EnterpriseApplication "<app-id>" `
   -SubscriptionIds "sub-id-1,sub-id-2"
 ```
@@ -489,7 +492,7 @@ Generic:
 Example:
 
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
+Invoke-OwnerLensLite `
   -EnterpriseApplication "<app-id>" `
   -UserOwnerTagNames "ownerMail","technicalOwner" `
   -GroupOwnerTagNames "ownerGroup","team" `
@@ -532,7 +535,7 @@ If no candidates exist, the report emits a `NotFound` row with signal `NONE` and
 Normal invocation displays the RBAC tree:
 
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
+Invoke-OwnerLensLite `
   -EnterpriseApplication "<app-id>" `
   -SubscriptionIds "<subscription-id>"
 ```
@@ -540,7 +543,7 @@ Normal invocation displays the RBAC tree:
 For the richest tree:
 
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
+Invoke-OwnerLensLite `
   -EnterpriseApplication "<app-id>" `
   -SubscriptionIds "<subscription-id>" `
   -ActivityDays 30 `
@@ -601,7 +604,7 @@ It does **not** mean that every neighboring principal is an owner.
 Use `-Verbose`:
 
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
+Invoke-OwnerLensLite `
   -EnterpriseApplication "<app-id>" `
   -SubscriptionIds "<subscription-id>" `
   -Verbose
@@ -637,7 +640,7 @@ Use this mode when you need to inspect individual evidence rows: exact role assi
 `-OutputTable` is **not** the full evidence-table mode. It returns only grouped owner candidates:
 
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
+Invoke-OwnerLensLite `
   -EnterpriseApplication "<app-id>" `
   -OutputTable
 ```
@@ -657,18 +660,35 @@ For automation or deeper analysis prefer `-OutputJson`.
 
 # Full JSON report
 
+## Export do pliku JSON
+
+Najprostszy eksport zapisz do wskazanego pliku przez `-OutputPath`. Katalog
+docelowy zostanie utworzony automatycznie, jeśli jeszcze nie istnieje.
+
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
-  -EnterpriseApplication "<app-id>" `
-  -OutputJson
+Invoke-OwnerLensLite `
+  -EnterpriseApplication "<app-id-lub-service-principal-object-id>" `
+  -OutputPath "./reports/ownerlens.json"
 ```
 
-Or save it:
+Przykład z danymi Blob data-plane (wymaga identyfikatora workspace, do którego
+trafiają `StorageBlobLogs`):
 
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
+Invoke-OwnerLensLite `
+  -EnterpriseApplication "<app-id-lub-service-principal-object-id>" `
+  -LogAnalyticsWorkspaceId "<log-analytics-workspace-id>" `
+  -OutputPath "./reports/ownerlens.json"
+```
+
+Po zakończeniu raport jest w `./reports/ownerlens.json`. Parametr `-OutputJson`
+zwraca JSON na standardowe wyjście, co jest przydatne w pipeline'ach lub gdy
+nie chcesz od razu zapisywać pliku:
+
+```powershell
+Invoke-OwnerLensLite `
   -EnterpriseApplication "<app-id>" `
-  -OutputPath ./reports/ownerlens.json
+  -OutputJson
 ```
 
 Report shape:
@@ -737,7 +757,7 @@ The helper enables Blob diagnostic logging to the selected workspace; the defaul
 Then run:
 
 ```powershell
-./Invoke-OwnerLensLite.ps1 `
+Invoke-OwnerLensLite `
   -EnterpriseApplication "<app-id>" `
   -LogAnalyticsWorkspaceId "<workspace-guid>" `
   -ActivityDays 30

@@ -56,6 +56,10 @@ function Invoke-OwnerLensLite {
     function Write-ProgressLine {
       param([string]$Message)
 
+      if ($OutputJson) {
+        return
+      }
+
       $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
       $progressMessage = [string]$Message
       if ($AnonymizeConsoleOutput) {

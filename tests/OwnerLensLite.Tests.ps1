@@ -881,6 +881,17 @@ Describe "Invoke-OwnerLensLite pipeline input" {
     $reports.enterpriseApplication.displayName | Should -Be @("App alpha", "App beta")
     Should -Invoke Resolve-EnterpriseApplication -Exactly 2
   }
+
+  It "does not write progress messages when returning JSON" {
+    Mock Write-Host {}
+
+    $json = Invoke-OwnerLensLite -EnterpriseApplication "alpha" -SkipLogin -SkipActivityLogs -OutputJson
+
+    { $json | ConvertFrom-Json -ErrorAction Stop } | Should -Not -Throw
+    $json | ConvertFrom-Json | Select-Object -ExpandProperty enterpriseApplication |
+      Select-Object -ExpandProperty displayName | Should -Be "App alpha"
+    Should -Invoke Write-Host -Exactly 0
+  }
 }
 
 Describe "OwnerLensLite owner candidate table" {
