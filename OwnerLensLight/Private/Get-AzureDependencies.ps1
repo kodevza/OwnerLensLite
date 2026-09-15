@@ -143,6 +143,7 @@ function Get-AzureDependencies {
               resourceId         = [string]$log.resourceId
               resourceType       = [string]$log.resourceType
               authorizationAction = [string]$log.authorizationAction; authorizationScope = [string]$log.authorizationScope; evidenceConfidence = "low"
+              evidenceType       = Get-OwnerLensActivityEvidenceType -OperationName ([string]$log.operationNameValue)
               evidenceReason     = "Activity logs show recent use by this service principal identifier; this is access evidence, not ownership proof."
             }
           }

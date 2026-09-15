@@ -12,6 +12,7 @@ Describe "OwnerLens Owner Candidates table" {
           confidence    = "HIGH"
           relationship  = "Direct"
           signal        = "GraphOwner"
+          evidenceType  = "Ownership Metadata"
           evidenceId    = $evidenceId
         }
       ))
@@ -34,6 +35,7 @@ Describe "OwnerLens Owner Candidates table" {
             confidence    = "HIGH"
             relationship  = "Direct"
             signal        = "GraphOwner"
+            evidenceType  = "Ownership Metadata"
             evidenceId    = "/servicePrincipals/sp-1/owners/user-1"
           }
         )
@@ -42,7 +44,7 @@ Describe "OwnerLens Owner Candidates table" {
     Should -Invoke Write-RichRule -Exactly 3
     @($script:ruleTitles) | Should -Be @("", "Owner Candidates", "")
     Should -Invoke Write-RichTable -Exactly 1 -ParameterFilter {
-      (@($Property) -join ",") -eq "candidate,type,confidence,relationship,signal,evidenceId" -and
+      (@($Property) -join ",") -eq "candidate,type,confidence,relationship,signal,evidenceType,evidenceId" -and
       $Box -eq "Square"
     }
   }

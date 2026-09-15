@@ -1,42 +1,42 @@
 $OwnerCandidatePolicy = @{
-  ExplicitOwner = @{
+  ExplicitOwner         = @{
     Enabled = $true
-    Score = 95
-    Signal = "OWNER"
+    Score   = 95
+    Signal  = "OWNER"
   }
 
-  ExplicitOwnerTag = @{
+  ExplicitOwnerTag      = @{
     Enabled = $true
-    Score = 80
-    Signal = "TAG"
+    Score   = 80
+    Signal  = "TAG"
   }
 
   DirectoryRelationship = @{
     Enabled = $true
-    Score = 30
-    Signal = "MEMBERSHIP"
+    Score   = 30
+    Signal  = "MEMBERSHIP"
   }
 
-  SharedRbacScope = @{
-    Enabled = $true
+  SharedRbacScope       = @{
+    Enabled              = $true
     ScoreByCandidateType = @{
-      User = 35
-      Group = 30
+      User    = 35
+      Group   = 30
       Default = 30
     }
-    Signal = "RBAC"
+    Signal               = "RBAC"
   }
 
-  OperationalActivity = @{
+  OperationalActivity   = @{
     Enabled = $true
-    Score = 25
-    Signal = "LOG"
+    Score   = 25
+    Signal  = "LOG"
   }
 
-  CredentialGenerator = @{
+  CredentialGenerator   = @{
     Enabled = $true
-    Score = 40
-    Signal = "SAS"
+    Score   = 40
+    Signal  = "SAS"
   }
 }
 
@@ -54,6 +54,61 @@ function Get-OwnerConfidenceRank {
     "MED" { return 2 }
     default { return 1 }
   }
+}
+
+function Get-OwnerLensActivityEvidenceType {
+  param(
+    [string]$OperationName,
+    [string]$ResourceId = "",
+    [string]$RoleAssignmentId = ""
+  )
+
+  $operation = $OperationName.Trim()
+  if ([string]::IsNullOrWhiteSpace($operation)) {
+    return "Configuration Access"
+  }
+
+  if ($operation -match "(?i)/(secrets?|certificates?|keys)/write$") {
+    return "Secret Setup"
+  }
+
+  if ($operation -match "(?i)/roleAssignments/(write|delete)$") {
+    if (
+      -not [string]::IsNullOrWhiteSpace($RoleAssignmentId) -and
+      $ResourceId.TrimEnd("/").Equals($RoleAssignmentId.TrimEnd("/"), [System.StringComparison]::OrdinalIgnoreCase)
+    ) {
+      return "Access Assignment"
+    }
+
+    return "Configuration Change"
+  }
+
+  if ($operation -match "(?i)(/write|/delete)$") {
+    return "Configuration Change"
+  }
+
+  if ($operation -match "(?i)(/read|/list|/get)$") {
+    return "Configuration Access"
+  }
+
+  return "Configuration Access"
+}
+
+function Get-OwnerLensEvidenceTypeFromActivityCaller {
+  param([object]$ActivityCaller)
+
+  $evidenceTypes = @($ActivityCaller.evidenceTypes | Where-Object {
+      -not [string]::IsNullOrWhiteSpace([string]$_)
+    })
+  if ($evidenceTypes -contains "Access Assignment") {
+    return "Access Assignment"
+  }
+
+  if ($evidenceTypes.Count -gt 0) {
+    return [string]$evidenceTypes[0]
+  }
+
+  return Get-OwnerLensActivityEvidenceType -OperationName ([string](@($ActivityCaller.operationNames) | Select-Object -First 1))
 }
 
 function ConvertTo-OwnerTagNameSet {
@@ -80,19 +135,19 @@ function Get-OwnerCandidateTagEntries {
 
   if ($Tags -is [System.Collections.IDictionary]) {
     return @($Tags.Keys | ForEach-Object {
-      [pscustomobject]@{
-        Name = [string]$_
-        Value = [string]$Tags[$_]
-      }
-    })
+        [pscustomobject]@{
+          Name  = [string]$_
+          Value = [string]$Tags[$_]
+        }
+      })
   }
 
   return @($Tags.PSObject.Properties | ForEach-Object {
-    [pscustomobject]@{
-      Name = [string]$_.Name
-      Value = [string]$_.Value
-    }
-  })
+      [pscustomobject]@{
+        Name  = [string]$_.Name
+        Value = [string]$_.Value
+      }
+    })
 }
 
 function Get-EnterpriseApplicationOwnerTagEntries {
@@ -107,18 +162,18 @@ function Get-EnterpriseApplicationOwnerTagEntries {
   }
 
   return @($Tags | ForEach-Object {
-    $tagText = [string]$_
-    if ([string]::IsNullOrWhiteSpace($tagText)) {
-      return
-    }
-
-    if ($tagText -match "^\s*([^=:]+)\s*[=:]\s*(.+?)\s*$") {
-      [pscustomobject]@{
-        Name = [string]$Matches[1]
-        Value = [string]$Matches[2]
+      $tagText = [string]$_
+      if ([string]::IsNullOrWhiteSpace($tagText)) {
+        return
       }
-    }
-  })
+
+      if ($tagText -match "^\s*([^=:]+)\s*[=:]\s*(.+?)\s*$") {
+        [pscustomobject]@{
+          Name  = [string]$Matches[1]
+          Value = [string]$Matches[2]
+        }
+      }
+    })
 }
 
 function Get-OwnerCandidateSasGeneratorKey {
@@ -266,7 +321,7 @@ function Get-OwnerCandidates {
   }
 
   $rankedCandidates = @($candidates |
-    Sort-Object @{ Expression = { Get-OwnerConfidenceRank -Confidence ([string]$_.confidence) }; Descending = $true }, candidate, evidenceId)
+      Sort-Object @{ Expression = { Get-OwnerConfidenceRank -Confidence ([string]$_.confidence) }; Descending = $true }, candidate, evidenceId)
 
   if ($rankedCandidates.Count -eq 0) {
     return @(Add-OwnerCandidateNotFound)

@@ -11,6 +11,7 @@ Describe "OwnerLens Azure RBAC Scope Activity Evidence table" {
           eventTimestamp     = "2024-01-01T00:00:00Z"
           callerName         = "Owner User"
           caller             = "owner@example.com"
+          evidenceType       = "Configuration Change"
           operationNameValue = "Microsoft.Web/sites/write"
           resourceId         = $resourceId
           rbacScope          = $scope
@@ -35,6 +36,7 @@ Describe "OwnerLens Azure RBAC Scope Activity Evidence table" {
               eventTimestamp     = "2024-01-01T00:00:00Z"
               callerName         = "Owner User"
               caller             = "owner@example.com"
+              evidenceType       = "Configuration Change"
               operationNameValue = "Microsoft.Web/sites/write"
               resourceId         = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/app1"
               rbacScope          = "/subscriptions/sub-1/resourceGroups/rg-1"
@@ -49,7 +51,7 @@ Describe "OwnerLens Azure RBAC Scope Activity Evidence table" {
       $Style -eq "cyan"
     }
     Should -Invoke Write-RichTable -Exactly 1 -ParameterFilter {
-      (@($Property) -join ",") -eq "eventTimestamp,callerName,caller,operationNameValue,resourceId,rbacScope,status" -and
+      (@($Property) -join ",") -eq "eventTimestamp,callerName,caller,evidenceType,operationNameValue,resourceId,rbacScope,status" -and
       $Box -eq "Square"
     }
   }

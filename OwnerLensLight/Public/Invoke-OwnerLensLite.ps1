@@ -42,7 +42,7 @@ function Invoke-OwnerLensLite {
 
     [switch]$OutputTable,
 
-    [switch]$AnonymizeConsoleOutput,
+    [switch]$AnonymizeOutput,
 
     [switch]$SkipActivityLogs,
 
@@ -62,7 +62,7 @@ function Invoke-OwnerLensLite {
 
       $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
       $progressMessage = [string]$Message
-      if ($AnonymizeConsoleOutput) {
+      if ($AnonymizeOutput) {
         $progressMessage = ConvertTo-OwnerLensAnonymizedString -Value $progressMessage -State $consoleAnonymizationState
       }
 
@@ -124,6 +124,11 @@ function Invoke-OwnerLensLite {
       -SkipActivityLogs:$SkipActivityLogs `
       -ProgressWriter ${function:Write-ProgressLine}
 
+    $exportReport = $report
+    if ($AnonymizeOutput) {
+      $exportReport = ConvertTo-OwnerLensAnonymizedConsoleReport -Report $report
+    }
+
     if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
       $resolvedOutputPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
       $outputDirectory = Split-Path -Parent $resolvedOutputPath
@@ -131,17 +136,17 @@ function Invoke-OwnerLensLite {
         New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
       }
 
-      $report | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath $resolvedOutputPath -Encoding UTF8
+      $exportReport | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath $resolvedOutputPath -Encoding UTF8
       Write-ProgressLine "Wrote dependency report: $resolvedOutputPath"
     }
 
     if ($OutputJson) {
-      return ($report | ConvertTo-Json -Depth 40)
+      return ($exportReport | ConvertTo-Json -Depth 40)
     }
 
     if ($OutputTable) {
       $tableReport = $report
-      if ($AnonymizeConsoleOutput) {
+      if ($AnonymizeOutput) {
         $tableReport = ConvertTo-OwnerLensAnonymizedConsoleReport -Report $report
       }
 
@@ -149,7 +154,7 @@ function Invoke-OwnerLensLite {
     }
 
     $consoleReport = $report
-    if ($AnonymizeConsoleOutput) {
+    if ($AnonymizeOutput) {
       $consoleReport = ConvertTo-OwnerLensAnonymizedConsoleReport -Report $report
     }
 

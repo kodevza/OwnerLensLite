@@ -30,22 +30,23 @@ function Format-OwnerCandidateTable {
   )
 
   $rows = @($Candidates |
-    Group-Object candidate, candidateType |
-    ForEach-Object {
-      $groupRows = @($_.Group | Sort-Object @{ Expression = { Get-OwnerConfidenceRank -Confidence ([string]$_.confidence) }; Descending = $true }, evidenceId)
-      $bestConfidence = [string]$groupRows[0].confidence
-      [pscustomobject]@{
-        candidate = [string]$groupRows[0].candidate
-        type = [string]$groupRows[0].candidateType
-        confidence = $bestConfidence
-        relationship = [string](($groupRows | Select-Object -ExpandProperty relationship -Unique) -join ",")
-        signal = [string](($groupRows | Select-Object -ExpandProperty signal -Unique) -join ",")
-        evidenceId = [string](($groupRows | Select-Object -ExpandProperty evidenceId -First 4) -join ",")
-      }
-    } |
-    Sort-Object @{ Expression = { Get-OwnerConfidenceRank -Confidence ([string]$_.confidence) }; Descending = $true }, candidate)
+      Group-Object candidate, candidateType |
+      ForEach-Object {
+        $groupRows = @($_.Group | Sort-Object @{ Expression = { Get-OwnerConfidenceRank -Confidence ([string]$_.confidence) }; Descending = $true }, evidenceId)
+        $bestConfidence = [string]$groupRows[0].confidence
+        [pscustomobject]@{
+          candidate    = [string]$groupRows[0].candidate
+          type         = [string]$groupRows[0].candidateType
+          confidence   = $bestConfidence
+          relationship = [string](($groupRows | Select-Object -ExpandProperty relationship -Unique) -join ",")
+          signal       = [string](($groupRows | Select-Object -ExpandProperty signal -Unique) -join ",")
+          evidenceType = [string](($groupRows | Select-Object -ExpandProperty evidenceType -Unique) -join ",")
+          evidenceId   = [string](($groupRows | Select-Object -ExpandProperty evidenceId -First 4) -join ",")
+        }
+      } |
+      Sort-Object @{ Expression = { Get-OwnerConfidenceRank -Confidence ([string]$_.confidence) }; Descending = $true }, candidate)
 
-  $columns = @("candidate", "type", "confidence", "relationship", "signal", "evidenceId")
+  $columns = @("candidate", "type", "confidence", "relationship", "signal", "evidenceType", "evidenceId")
   $lines = @(
     ($columns -join "`t")
     $rows | ForEach-Object {

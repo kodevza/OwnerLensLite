@@ -21,21 +21,24 @@ function New-OwnerCandidate {
     [Parameter(Mandatory = $true)]
     [string]$EvidenceSource,
 
+    [string]$EvidenceType = "Unknown",
+
     [string]$EvidenceValue = "",
 
     [string]$Reason = ""
   )
 
   return [pscustomobject]@{
-    candidate = $Candidate
-    candidateType = $CandidateType
-    confidence = $Confidence
-    relationship = $Relationship
-    signal = $Signal
-    evidenceId = $EvidenceId
+    candidate      = $Candidate
+    candidateType  = $CandidateType
+    confidence     = $Confidence
+    relationship   = $Relationship
+    signal         = $Signal
+    evidenceType   = $EvidenceType
+    evidenceId     = $EvidenceId
     evidenceSource = $EvidenceSource
-    evidenceValue = $EvidenceValue
-    reason = $Reason
+    evidenceValue  = $EvidenceValue
+    reason         = $Reason
   }
 }
 
@@ -111,7 +114,8 @@ function Add-OwnerCandidateFromGraphOwner {
     if ([string]::IsNullOrWhiteSpace($candidateName)) {
       $candidateName = [string]$Owner.displayName
     }
-  } else {
+  }
+  else {
     $candidateName = [string]$Owner.displayName
   }
 
@@ -137,6 +141,7 @@ function Add-OwnerCandidateFromGraphOwner {
     -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $Rule -CandidateType $candidateType)) `
     -Relationship "Direct" `
     -Signal ([string]$Rule.Signal) `
+    -EvidenceType "Ownership Metadata" `
     -EvidenceId ("{0}/owners/{1}" -f $ownerEvidenceBase, [string]$Owner.objectId) `
     -EvidenceSource "$ownerEvidenceBase/owners" `
     -EvidenceValue ([string]$Owner.objectId) `
@@ -167,6 +172,7 @@ function Add-OwnerCandidateFromDirectoryRelationship {
     -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $Rule -CandidateType $candidateType)) `
     -Relationship "Indirect" `
     -Signal ([string]$Rule.Signal) `
+    -EvidenceType "Directory Relationship" `
     -EvidenceId ("/servicePrincipals/{0}/memberOf/{1}" -f $EnterpriseApplication.objectId, [string]$MemberOf.objectId) `
     -EvidenceSource "/servicePrincipals/$($EnterpriseApplication.objectId)/memberOf" `
     -EvidenceValue ([string]$MemberOf.objectId) `
@@ -192,7 +198,8 @@ function Add-OwnerCandidateFromCoAssignedRoleCandidate {
     if ([string]::IsNullOrWhiteSpace($candidateName)) {
       $candidateName = [string]$CoAssignee.principalDisplayName
     }
-  } else {
+  }
+  else {
     $candidateName = [string]$CoAssignee.principalDisplayName
   }
 
@@ -215,6 +222,7 @@ function Add-OwnerCandidateFromCoAssignedRoleCandidate {
     -Confidence (ConvertTo-OwnerConfidence -Score $candidateScore) `
     -Relationship "Indirect" `
     -Signal ([string]$Rule.Signal) `
+    -EvidenceType "Directory Relationship" `
     -EvidenceId ([string]$CoAssignee.scope) `
     -EvidenceSource ([string]$CoAssignee.scope) `
     -EvidenceValue ([string]$CoAssignee.roleDefinitionName) `
@@ -244,6 +252,7 @@ function Add-OwnerCandidateFromAzureActivityEvidence {
     -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $Rule -CandidateType "ActivityCaller")) `
     -Relationship "Indirect" `
     -Signal ([string]$Rule.Signal) `
+    -EvidenceType (Get-OwnerLensActivityEvidenceType -OperationName ([string]$Activity.operationNameValue)) `
     -EvidenceId ([string]$Activity.resourceId) `
     -EvidenceSource ([string]$Activity.resourceId) `
     -EvidenceValue ([string]$Activity.operationNameValue) `
@@ -318,6 +327,7 @@ function Add-OwnerCandidateFromRbacScopeActivityCaller {
     -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $Rule -CandidateType $candidateType)) `
     -Relationship "Indirect" `
     -Signal ([string]$Rule.Signal) `
+    -EvidenceType (Get-OwnerLensEvidenceTypeFromActivityCaller -ActivityCaller $ActivityCaller) `
     -EvidenceId $evidenceId `
     -EvidenceSource "AzureActivity" `
     -EvidenceValue ("events={0},lastSeen={1}" -f [string]$ActivityCaller.eventCount, [string]$ActivityCaller.lastSeen) `
@@ -402,6 +412,7 @@ function Add-OwnerCandidateFromSasGeneratorGroup {
     -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $Rule -CandidateType $candidateType)) `
     -Relationship "Indirect" `
     -Signal ([string]$Rule.Signal) `
+    -EvidenceType "Secret Setup" `
     -EvidenceId $evidenceId `
     -EvidenceSource "StorageBlobLogs" `
     -EvidenceValue ([string]($evidenceValues -join ",")) `
@@ -415,6 +426,7 @@ function Add-OwnerCandidateNotFound {
     -Confidence "LOW" `
     -Relationship "None" `
     -Signal "NONE" `
+    -EvidenceType "No Evidence" `
     -EvidenceId "not-found" `
     -EvidenceSource "ownerCandidates" `
     -EvidenceValue "" `
@@ -464,6 +476,7 @@ function Add-OwnerCandidatesFromTags {
     [hashtable]$Rule,
     [string]$EvidenceId,
     [string]$EvidenceSource,
+    [string]$EvidenceType = "Ownership Metadata",
     [string]$Reason,
     [hashtable]$UserOwnerTagNameSet,
     [hashtable]$GroupOwnerTagNameSet,
@@ -495,6 +508,7 @@ function Add-OwnerCandidatesFromTags {
       -Confidence (ConvertTo-OwnerConfidence -Score (Get-OwnerCandidatePolicyScore -Rule $Rule -CandidateType $candidateType)) `
       -Relationship $Relationship `
       -Signal ([string]$Rule.Signal) `
+      -EvidenceType $EvidenceType `
       -EvidenceId $EvidenceId `
       -EvidenceSource $EvidenceSource `
       -EvidenceValue ("{0}={1}" -f $tag.Name, [string]$tag.Value) `

@@ -1,7 +1,11 @@
 function Get-OwnerLensAzureRbacScopeActivityEvidenceTableRows {
   param([object[]]$RbacScopeActivityEvidence)
 
-  @($RbacScopeActivityEvidence | Select-Object eventTimestamp, callerName, caller, operationNameValue, @{ Name = "resourceId"; Expression = { Format-OwnerLensAzureResourceId -ResourceId ([string]$_.resourceId) } }, @{ Name = "rbacScope"; Expression = { Format-OwnerLensAzureResourceId -ResourceId ([string]$_.rbacScope) } }, status)
+  @(
+    $RbacScopeActivityEvidence | Select-Object eventTimestamp, callerName, caller, evidenceType, operationNameValue,
+    @{ Name = "resourceId"; Expression = { Format-OwnerLensAzureResourceId -ResourceId ([string]$_.resourceId) } },
+    @{ Name = "rbacScope"; Expression = { Format-OwnerLensAzureResourceId -ResourceId ([string]$_.rbacScope) } }, status
+  )
 }
 
 function Show-OwnerLensAzureRbacScopeActivityEvidenceTable {
@@ -10,5 +14,5 @@ function Show-OwnerLensAzureRbacScopeActivityEvidenceTable {
   Write-OwnerLensReportTable `
     -Title "Recent Azure RBAC Scope Activity Evidence" `
     -Rows (Get-OwnerLensAzureRbacScopeActivityEvidenceTableRows -RbacScopeActivityEvidence (Get-OwnerLensReportArray -Report $Report -Path "azure.rbacScopeActivityEvidence")) `
-    -Property eventTimestamp, callerName, caller, operationNameValue, resourceId, rbacScope, status
+    -Property eventTimestamp, callerName, caller, evidenceType, operationNameValue, resourceId, rbacScope, status
 }

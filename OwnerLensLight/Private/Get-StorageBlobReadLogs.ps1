@@ -41,26 +41,26 @@ function Invoke-LogAnalyticsQuery {
 
   $accessToken = Get-LogAnalyticsAccessToken
   $headers = @{
-    Authorization = "Bearer $accessToken"
+    Authorization  = "Bearer $accessToken"
     "Content-Type" = "application/json"
   }
   $body = @{
-    query = $Query
+    query    = $Query
     timespan = "$($StartTime.ToUniversalTime().ToString("o"))/$($EndTime.ToUniversalTime().ToString("o"))"
   } | ConvertTo-Json -Depth 10
 
   $response = Invoke-RestRequestWithRetry `
     -OperationName "Log Analytics query" `
     -Request {
-      Invoke-RestMethod `
-        -Method POST `
-        -Uri "https://api.loganalytics.azure.com/v1/workspaces/$WorkspaceId/query" `
-        -Headers $headers `
-        -Body $body `
-        -ErrorAction Stop
-    }
+    Invoke-RestMethod `
+      -Method POST `
+      -Uri "https://api.loganalytics.azure.com/v1/workspaces/$WorkspaceId/query" `
+      -Headers $headers `
+      -Body $body `
+      -ErrorAction Stop
+  }
 
-  $primaryResult = @($response.tables | Where-Object name -eq "PrimaryResult" | Select-Object -First 1)
+  $primaryResult = @($response.tables | Where-Object name -EQ "PrimaryResult" | Select-Object -First 1)
   if (-not $primaryResult) {
     return @()
   }
@@ -168,7 +168,8 @@ function ConvertTo-SafeStorageBlobUri {
     if ($parsedUri.IsAbsoluteUri) {
       return $parsedUri.GetLeftPart([System.UriPartial]::Path)
     }
-  } catch {
+  }
+  catch {
     $queryStart = $Uri.IndexOf("?")
     if ($queryStart -ge 0) {
       return $Uri.Substring(0, $queryStart)
@@ -273,7 +274,13 @@ blobAccessEvents
 | extend SasGeneratorAppId = DelegationGeneratorAppId,
          SasGeneratorTenantId = iff(isempty(SasGeneratorTenantId), DelegationGeneratorTenantId, SasGeneratorTenantId),
          SasGeneratorUpn = DelegationGeneratorUpn
-| project TimeGenerated, AccountName, OperationName, StatusCode, StatusText, AuthenticationType, AuthenticationHash, SasExpiryStatus, SasGeneratorObjectId, SasGeneratorTenantId, SasGeneratorUpn, SasGeneratorAppId, SasGeneratorEventTimestamp, SasExpiresOn, SasSignedIdentifier, SasSignedPermissions, RequesterObjectId, RequesterAppId, RequesterTenantId, RequesterUpn, CallerIpAddress, UserAgentHeader, SafeUri, ObjectKey, _ResourceId
+| project TimeGenerated, AccountName, OperationName, StatusCode, StatusText,
+          AuthenticationType, AuthenticationHash, SasExpiryStatus,
+          SasGeneratorObjectId, SasGeneratorTenantId, SasGeneratorUpn,
+          SasGeneratorAppId, SasGeneratorEventTimestamp, SasExpiresOn,
+          SasSignedIdentifier, SasSignedPermissions, RequesterObjectId,
+          RequesterAppId, RequesterTenantId, RequesterUpn, CallerIpAddress,
+          UserAgentHeader, SafeUri, ObjectKey, _ResourceId
 | order by TimeGenerated desc
 | take $MaxRecord
 "@
@@ -287,48 +294,52 @@ blobAccessEvents
   foreach ($row in $rows) {
     $safeUri = if (-not [string]::IsNullOrWhiteSpace([string]$row.SafeUri)) {
       [string]$row.SafeUri
-    } else {
+    }
+    else {
       ConvertTo-SafeStorageBlobUri -Uri ([string]$row.Uri)
     }
 
     [pscustomobject]@{
-      eventTimestamp = [string]$row.TimeGenerated
-      storageAccountName = [string]$row.AccountName
-      storageAccountResourceId = [string]$row._ResourceId
-      operationName = [string]$row.OperationName
-      statusCode = [string]$row.StatusCode
-      statusText = [string]$row.StatusText
-      accessDirection = Get-StorageBlobAccessDirection -OperationName ([string]$row.OperationName)
-      authenticationType = [string]$row.AuthenticationType
-      authenticationHash = [string]$row.AuthenticationHash
-      sasExpiryStatus = [string]$row.SasExpiryStatus
-      sasGeneratorObjectId = [string]$row.SasGeneratorObjectId
-      sasGeneratorAppId = [string]$row.SasGeneratorAppId
-      sasGeneratorTenantId = [string]$row.SasGeneratorTenantId
-      sasGeneratorUpn = [string]$row.SasGeneratorUpn
-      sasGeneratorEventTimestamp = [string]$row.SasGeneratorEventTimestamp
-      sasExpiresOn = [string]$row.SasExpiresOn
-      sasSignedIdentifier = [string]$row.SasSignedIdentifier
-      sasSignedPermissions = [string]$row.SasSignedPermissions
-      requesterObjectId = [string]$row.RequesterObjectId
-      requesterAppId = [string]$row.RequesterAppId
-      requesterTenantId = [string]$row.RequesterTenantId
-      requesterUpn = [string]$row.RequesterUpn
-      requesterType = Get-StorageBlobParticipantType -RequesterAppId ([string]$row.RequesterAppId) -RequesterUpn ([string]$row.RequesterUpn)
-      callerIpAddress = [string]$row.CallerIpAddress
-      userAgentHeader = [string]$row.UserAgentHeader
-      uri = ConvertTo-SafeStorageBlobUri -Uri $safeUri
-      objectKey = [string]$row.ObjectKey
+      eventTimestamp                   = [string]$row.TimeGenerated
+      storageAccountName               = [string]$row.AccountName
+      storageAccountResourceId         = [string]$row._ResourceId
+      operationName                    = [string]$row.OperationName
+      statusCode                       = [string]$row.StatusCode
+      statusText                       = [string]$row.StatusText
+      accessDirection                  = Get-StorageBlobAccessDirection -OperationName ([string]$row.OperationName)
+      authenticationType               = [string]$row.AuthenticationType
+      authenticationHash               = [string]$row.AuthenticationHash
+      sasExpiryStatus                  = [string]$row.SasExpiryStatus
+      sasGeneratorObjectId             = [string]$row.SasGeneratorObjectId
+      sasGeneratorAppId                = [string]$row.SasGeneratorAppId
+      sasGeneratorTenantId             = [string]$row.SasGeneratorTenantId
+      sasGeneratorUpn                  = [string]$row.SasGeneratorUpn
+      sasGeneratorEventTimestamp       = [string]$row.SasGeneratorEventTimestamp
+      sasExpiresOn                     = [string]$row.SasExpiresOn
+      sasSignedIdentifier              = [string]$row.SasSignedIdentifier
+      sasSignedPermissions             = [string]$row.SasSignedPermissions
+      requesterObjectId                = [string]$row.RequesterObjectId
+      requesterAppId                   = [string]$row.RequesterAppId
+      requesterTenantId                = [string]$row.RequesterTenantId
+      requesterUpn                     = [string]$row.RequesterUpn
+      requesterType                    = Get-StorageBlobParticipantType -RequesterAppId ([string]$row.RequesterAppId) -RequesterUpn ([string]$row.RequesterUpn)
+      callerIpAddress                  = [string]$row.CallerIpAddress
+      userAgentHeader                  = [string]$row.UserAgentHeader
+      uri                              = ConvertTo-SafeStorageBlobUri -Uri $safeUri
+      objectKey                        = [string]$row.ObjectKey
       matchesInspectedServicePrincipal = if ($ServicePrincipal) {
         [bool](Test-StorageBlobRequesterMatchesServicePrincipal -BlobAccess ([pscustomobject]@{
               requesterObjectId = [string]$row.RequesterObjectId
-              requesterAppId = [string]$row.RequesterAppId
+              requesterAppId    = [string]$row.RequesterAppId
             }) -ServicePrincipal $ServicePrincipal)
-      } else {
+      }
+      else {
         $false
       }
-      evidenceConfidence = "medium"
-      evidenceReason = "StorageBlobLogs show a blob data-plane operation recorded by Azure Storage diagnostic logs. Publish operations can represent data sent to an agent; read operations can represent data consumed from it."
+      evidenceType                     = "Data Access"
+      evidenceConfidence               = "medium"
+      evidenceReason                   = "StorageBlobLogs show a blob data-plane operation recorded by Azure Storage diagnostic logs. " +
+      "Publish operations can represent data sent to an agent; read operations can represent data consumed from it."
     }
   }
 }
@@ -349,39 +360,41 @@ function Get-StorageBlobReadCallers {
     $items = @($group.Group | Sort-Object eventTimestamp)
     $first = $items | Select-Object -First 1
     $last = $items | Select-Object -Last 1
-    $publishCount = @($items | Where-Object accessDirection -eq "Publish").Count
-    $readCount = @($items | Where-Object accessDirection -eq "Read").Count
+    $publishCount = @($items | Where-Object accessDirection -EQ "Publish").Count
+    $readCount = @($items | Where-Object accessDirection -EQ "Read").Count
 
     [pscustomobject]@{
-      requesterKey = [string]$group.Name
-      requesterObjectId = [string]$last.requesterObjectId
-      requesterAppId = [string]$last.requesterAppId
-      requesterTenantId = [string]$last.requesterTenantId
-      requesterUpn = [string]$last.requesterUpn
-      requesterType = [string]$last.requesterType
-      authenticationType = [string]$last.authenticationType
-      readCount = [int]$items.Count
-      blobAccessCount = [int]$items.Count
-      blobReadCount = [int]$readCount
-      blobPublishCount = [int]$publishCount
-      firstSeen = [string]$first.eventTimestamp
-      lastSeen = [string]$last.eventTimestamp
-      storageAccounts = @($items | Select-Object -ExpandProperty storageAccountName -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-      accessDirections = @($items | Select-Object -ExpandProperty accessDirection -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-      operationNames = @($items | Select-Object -ExpandProperty operationName -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-      callerIpAddresses = @($items | Select-Object -ExpandProperty callerIpAddress -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-      userAgentHeaders = @($items | Select-Object -ExpandProperty userAgentHeader -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 10)
-      sasAuthenticationCount = [int](@($items | Where-Object {
-          ([string]$_.authenticationType).Equals("SAS", [System.StringComparison]::OrdinalIgnoreCase)
-        }).Count)
-      sasGeneratorObjectIds = @($items | ForEach-Object { [string]$_.sasGeneratorObjectId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      sasGeneratorAppIds = @($items | ForEach-Object { [string]$_.sasGeneratorAppId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      sasGeneratorUpns = @($items | ForEach-Object { [string]$_.sasGeneratorUpn } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      sasSignedIdentifiers = @($items | ForEach-Object { [string]$_.sasSignedIdentifier } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      sampleUris = @($items | Select-Object -ExpandProperty uri -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 10)
+      requesterKey                     = [string]$group.Name
+      requesterObjectId                = [string]$last.requesterObjectId
+      requesterAppId                   = [string]$last.requesterAppId
+      requesterTenantId                = [string]$last.requesterTenantId
+      requesterUpn                     = [string]$last.requesterUpn
+      requesterType                    = [string]$last.requesterType
+      authenticationType               = [string]$last.authenticationType
+      readCount                        = [int]$items.Count
+      blobAccessCount                  = [int]$items.Count
+      blobReadCount                    = [int]$readCount
+      blobPublishCount                 = [int]$publishCount
+      firstSeen                        = [string]$first.eventTimestamp
+      lastSeen                         = [string]$last.eventTimestamp
+      storageAccounts                  = @($items | Select-Object -ExpandProperty storageAccountName -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      accessDirections                 = @($items | Select-Object -ExpandProperty accessDirection -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      operationNames                   = @($items | Select-Object -ExpandProperty operationName -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      callerIpAddresses                = @($items | Select-Object -ExpandProperty callerIpAddress -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      userAgentHeaders                 = @($items | Select-Object -ExpandProperty userAgentHeader -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 10)
+      sasAuthenticationCount           = [int](@($items | Where-Object {
+            ([string]$_.authenticationType).Equals("SAS", [System.StringComparison]::OrdinalIgnoreCase)
+          }).Count)
+      sasGeneratorObjectIds            = @($items | ForEach-Object { [string]$_.sasGeneratorObjectId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasGeneratorAppIds               = @($items | ForEach-Object { [string]$_.sasGeneratorAppId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasGeneratorUpns                 = @($items | ForEach-Object { [string]$_.sasGeneratorUpn } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasSignedIdentifiers             = @($items | ForEach-Object { [string]$_.sasSignedIdentifier } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sampleUris                       = @($items | Select-Object -ExpandProperty uri -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 10)
       matchesInspectedServicePrincipal = [bool](@($items | Where-Object matchesInspectedServicePrincipal).Count -gt 0)
-      evidenceConfidence = "medium"
-      evidenceReason = "Requester has one or more StorageBlobLogs data-plane records in the selected time window, grouped with both user and service principal identifiers when Azure logged both."
+      evidenceTypes                    = @($items | ForEach-Object { [string]$_.evidenceType } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      evidenceConfidence               = "medium"
+      evidenceReason                   = "Requester has one or more StorageBlobLogs data-plane records in the selected time window, " +
+      "grouped with both user and service principal identifiers when Azure logged both."
     }
   }
 }
@@ -406,9 +419,11 @@ function Get-StorageBlobReadObjects {
 
     $blobKey = if (-not [string]::IsNullOrWhiteSpace($uri)) {
       "uri:$uri"
-    } elseif (-not [string]::IsNullOrWhiteSpace($objectKey)) {
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($objectKey)) {
       "objectKey:$objectKey"
-    } else {
+    }
+    else {
       "unknownBlob"
     }
 
@@ -421,33 +436,34 @@ function Get-StorageBlobReadObjects {
     $last = $items | Select-Object -Last 1
 
     [pscustomobject]@{
-      requesterBlobKey = [string]$group.Name
-      requesterObjectId = [string]$last.requesterObjectId
-      requesterAppId = [string]$last.requesterAppId
-      requesterTenantId = [string]$last.requesterTenantId
-      requesterUpn = [string]$last.requesterUpn
-      requesterType = [string]$last.requesterType
-      authenticationType = [string]$last.authenticationType
-      storageAccountName = [string]$last.storageAccountName
-      storageAccountResourceId = [string]$last.storageAccountResourceId
-      uri = [string]$last.uri
-      objectKey = [string]$last.objectKey
-      sasAuthenticationCount = [int](@($items | Where-Object {
-          ([string]$_.authenticationType).Equals("SAS", [System.StringComparison]::OrdinalIgnoreCase)
-        }).Count)
-      sasGeneratorObjectIds = @($items | ForEach-Object { [string]$_.sasGeneratorObjectId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      sasGeneratorAppIds = @($items | ForEach-Object { [string]$_.sasGeneratorAppId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      sasGeneratorUpns = @($items | ForEach-Object { [string]$_.sasGeneratorUpn } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      sasSignedIdentifiers = @($items | ForEach-Object { [string]$_.sasSignedIdentifier } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
-      blobReadCount = [int]$items.Count
-      firstReadAt = [string]$first.eventTimestamp
-      lastReadAt = [string]$last.eventTimestamp
-      operationNames = @($items | Select-Object -ExpandProperty operationName -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-      callerIpAddresses = @($items | Select-Object -ExpandProperty callerIpAddress -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-      userAgentHeaders = @($items | Select-Object -ExpandProperty userAgentHeader -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 10)
+      requesterBlobKey                 = [string]$group.Name
+      requesterObjectId                = [string]$last.requesterObjectId
+      requesterAppId                   = [string]$last.requesterAppId
+      requesterTenantId                = [string]$last.requesterTenantId
+      requesterUpn                     = [string]$last.requesterUpn
+      requesterType                    = [string]$last.requesterType
+      authenticationType               = [string]$last.authenticationType
+      storageAccountName               = [string]$last.storageAccountName
+      storageAccountResourceId         = [string]$last.storageAccountResourceId
+      uri                              = [string]$last.uri
+      objectKey                        = [string]$last.objectKey
+      sasAuthenticationCount           = [int](@($items | Where-Object {
+            ([string]$_.authenticationType).Equals("SAS", [System.StringComparison]::OrdinalIgnoreCase)
+          }).Count)
+      sasGeneratorObjectIds            = @($items | ForEach-Object { [string]$_.sasGeneratorObjectId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasGeneratorAppIds               = @($items | ForEach-Object { [string]$_.sasGeneratorAppId } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasGeneratorUpns                 = @($items | ForEach-Object { [string]$_.sasGeneratorUpn } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      sasSignedIdentifiers             = @($items | ForEach-Object { [string]$_.sasSignedIdentifier } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      blobReadCount                    = [int]$items.Count
+      firstReadAt                      = [string]$first.eventTimestamp
+      lastReadAt                       = [string]$last.eventTimestamp
+      operationNames                   = @($items | Select-Object -ExpandProperty operationName -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      callerIpAddresses                = @($items | Select-Object -ExpandProperty callerIpAddress -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      userAgentHeaders                 = @($items | Select-Object -ExpandProperty userAgentHeader -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 10)
       matchesInspectedServicePrincipal = [bool](@($items | Where-Object matchesInspectedServicePrincipal).Count -gt 0)
-      evidenceConfidence = "medium"
-      evidenceReason = "Requester read a specific blob one or more times according to StorageBlobLogs in the selected time window."
+      evidenceTypes                    = @($items | ForEach-Object { [string]$_.evidenceType } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
+      evidenceConfidence               = "medium"
+      evidenceReason                   = "Requester read a specific blob one or more times according to StorageBlobLogs in the selected time window."
     }
   }
 }

@@ -38,6 +38,7 @@ function New-AzureRbacScopeActivityEvidence {
     subscriptionId                   = [string]$Subscription.Id
     subscriptionName                 = [string]$Subscription.Name
     rbacScope                        = [string]$RoleAssignment.Scope
+    roleAssignmentId                 = [string]$RoleAssignment.RoleAssignmentId
     rbacRoleDefinitionName           = [string]$RoleAssignment.RoleDefinitionName
     eventTimestamp                   = [string]$Log.eventTimestamp
     caller                           = [string]$Log.caller
@@ -53,6 +54,10 @@ function New-AzureRbacScopeActivityEvidence {
     resourceType                     = [string]$Log.resourceType
     authorizationAction              = [string]$Log.authorizationAction
     authorizationScope               = [string]$Log.authorizationScope
+    evidenceType                     = Get-OwnerLensActivityEvidenceType `
+      -OperationName ([string]$Log.operationNameValue) `
+      -ResourceId ([string]$Log.resourceId) `
+      -RoleAssignmentId ([string]$RoleAssignment.RoleAssignmentId)
     matchesInspectedServicePrincipal = [bool](Test-ActivityLogMatchesServicePrincipal -Log $Log -ServicePrincipal $ServicePrincipal)
     evidenceConfidence               = "low"
     evidenceReason                   = "Activity logs show management-plane operations under an RBAC scope assigned to the inspected service principal; this is access context, not ownership proof."
@@ -92,6 +97,7 @@ function Get-AzureRbacScopeActivityCallers {
       rbacScopes                       = @($items | Select-Object -ExpandProperty rbacScope -Unique)
       resourceIds                      = @($items | Select-Object -ExpandProperty resourceId -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
       operationNames                   = @($items | Select-Object -ExpandProperty operationNameValue -Unique | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      evidenceTypes                    = @($items | ForEach-Object { [string]$_.evidenceType } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
       matchesInspectedServicePrincipal = [bool](@($items | Where-Object matchesInspectedServicePrincipal).Count -gt 0)
       evidenceConfidence               = "low"
       evidenceReason                   = "Caller performed recent management-plane operations under one or more RBAC scopes assigned to the inspected service principal."

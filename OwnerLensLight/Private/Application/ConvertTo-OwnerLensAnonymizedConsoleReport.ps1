@@ -1,11 +1,13 @@
 function New-OwnerLensAnonymizationState {
   [pscustomobject]@{
-    UserAliases = @{}
-    GuidAliases = @{}
-    StorageAliases = @{}
-    UserCount = 0
-    GuidCount = 0
-    StorageCount = 0
+    UserAliases        = @{}
+    GuidAliases        = @{}
+    StorageAliases     = @{}
+    ApplicationAliases = @{}
+    UserCount          = 0
+    GuidCount          = 0
+    StorageCount       = 0
+    ApplicationCount   = 0
   }
 }
 
@@ -21,7 +23,7 @@ function Get-OwnerLensAnonymizedAlias {
     [string]$Value,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("User", "Guid", "Storage")]
+    [ValidateSet("User", "Guid", "Storage", "Application")]
     [string]$Kind
   )
 
@@ -29,12 +31,18 @@ function Get-OwnerLensAnonymizedAlias {
     if ($Kind -eq "User") {
       $State.UserCount = [int]$State.UserCount + 1
       $Aliases[$Value] = "user-{0:0000}" -f [int]$State.UserCount
-    } elseif ($Kind -eq "Guid") {
+    }
+    elseif ($Kind -eq "Guid") {
       $State.GuidCount = [int]$State.GuidCount + 1
       $Aliases[$Value] = "guid-{0:0000}" -f [int]$State.GuidCount
-    } else {
+    }
+    elseif ($Kind -eq "Storage") {
       $State.StorageCount = [int]$State.StorageCount + 1
       $Aliases[$Value] = "storage-{0:0000}" -f [int]$State.StorageCount
+    }
+    else {
+      $State.ApplicationCount = [int]$State.ApplicationCount + 1
+      $Aliases[$Value] = "application-{0:0000}" -f [int]$State.ApplicationCount
     }
   }
 
@@ -133,6 +141,20 @@ function Test-OwnerLensStorageAccountField {
   return $false
 }
 
+function Test-OwnerLensApplicationNameField {
+  param(
+    [string]$PropertyName,
+    [AllowNull()]
+    [object]$SourceObject
+  )
+
+  if ($PropertyName -ne "displayName" -or $null -eq $SourceObject) {
+    return $false
+  }
+
+  return $null -ne $SourceObject.PSObject.Properties["appId"]
+}
+
 function ConvertTo-OwnerLensAnonymizedStorageString {
   param(
     [Parameter(Mandatory = $true)]
@@ -185,11 +207,18 @@ function ConvertTo-OwnerLensAnonymizedString {
     return Get-OwnerLensAnonymizedStorageAlias -Value ([string]$Value) -State $State
   }
 
+  if (Test-OwnerLensApplicationNameField -PropertyName $PropertyName -SourceObject $SourceObject) {
+    return Get-OwnerLensAnonymizedAlias -Aliases $State.ApplicationAliases -State $State -Value ([string]$Value) -Kind Application
+  }
+
   $emailPattern = "(?i)\b[A-Z0-9._%+\-']+@[A-Z0-9.\-]+\.[A-Z]{2,}\b"
   $text = [regex]::Replace([string]$Value, $emailPattern, {
       param($match)
       Get-OwnerLensAnonymizedAlias -Aliases $State.UserAliases -State $State -Value $match.Value.ToLowerInvariant() -Kind User
     })
+
+  $urlPattern = '(?i)\bhttps?://[^\s"''<>\]]+'
+  $text = [regex]::Replace($text, $urlPattern, "[redacted-url]")
 
   $text = ConvertTo-OwnerLensAnonymizedStorageString -Value $text -State $State
 

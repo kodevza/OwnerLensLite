@@ -657,6 +657,7 @@ type
 confidence
 relationship
 signal
+evidenceType
 evidenceId
 ```
 
@@ -693,6 +694,23 @@ nie chcesz od razu zapisywać pliku:
 Invoke-OwnerLensLite `
   -EnterpriseApplication "<app-id>" `
   -OutputJson
+```
+
+## Anonimizowany eksport JSON
+
+Ustaw zmienną na `$true` i przekaż ją do `-AnonymizeOutput`. Dotyczy to zarówno
+JSON zwracanego przez `-OutputJson`, pliku podanego w `-OutputPath` oraz
+widoku w konsoli. Aliasowanie jest spójne w całym raporcie, dzięki czemu
+zależności nadal można analizować.
+
+```powershell
+$EA = "<app-id-lub-service-principal-object-id>"
+$anonymizeOutput = $true
+
+Invoke-OwnerLensLite `
+  -EnterpriseApplication $EA `
+  -OutputPath "./reports/ownerlens-anonymized.json" `
+  -AnonymizeOutput:$anonymizeOutput
 ```
 
 Report shape:
@@ -738,6 +756,26 @@ evidenceSource
 evidenceValue
 reason
 ```
+
+`evidenceType` explains the nature of each signal. Current values include
+`Data Access` (Storage data-plane evidence),
+`Configuration Change` (Azure Activity Log `write` or `delete` operations),
+`Configuration Access` (management-plane operations that do not prove a
+change), `Secret Setup` (a user-delegation SAS generator
+or a Key Vault secret/key/certificate write),
+and contextual values such as `Ownership Metadata` and `Directory Relationship`.
+
+`Directory Relationship` identifies a principal or group that is related to
+the Enterprise Application through Entra membership or through access on the
+same Azure RBAC scope. It indicates that the principal has related access; it
+does not assert that the principal granted it.
+
+`Access Assignment` is reserved for an Azure Activity Log
+`Microsoft.Authorization/roleAssignments/write` or `delete` operation whose
+resource ID matches an RBAC assignment held by the inspected Enterprise
+Application. In that case, the Activity Log caller is the actor who assigned
+or removed that access. A role-assignment operation elsewhere in the same
+scope remains `Configuration Change`, avoiding an unsupported attribution.
 
 # Storage Blob diagnostic setup
 

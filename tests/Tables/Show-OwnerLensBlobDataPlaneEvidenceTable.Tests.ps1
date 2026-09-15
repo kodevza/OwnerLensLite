@@ -9,6 +9,7 @@ Describe "OwnerLens Blob Data-Plane Evidence table" {
         [pscustomobject]@{
           eventTimestamp     = "2024-01-01T00:00:00Z"
           storageAccountName = "st1"
+          evidenceType       = "Data Access"
           accessDirection    = "Read"
           requesterUpn       = "owner@example.com"
           requesterObjectId  = "user-1"

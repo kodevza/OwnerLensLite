@@ -51,6 +51,18 @@ Describe "OwnerLensLite Azure helper logic" {
       -Log ([pscustomobject]@{ callerObjectId = "other" })) | Should -BeFalse
   }
 
+  It "classifies evidence by the operation semantics" {
+    (Get-OwnerLensActivityEvidenceType -OperationName "Microsoft.Web/sites/write") | Should -Be "Configuration Change"
+    (Get-OwnerLensActivityEvidenceType -OperationName "Microsoft.KeyVault/vaults/secrets/write") | Should -Be "Secret Setup"
+    (Get-OwnerLensActivityEvidenceType -OperationName "Microsoft.Web/sites/read") | Should -Be "Configuration Access"
+    (Get-OwnerLensActivityEvidenceType -OperationName "Microsoft.Web/sites/restart/action") | Should -Be "Configuration Access"
+    (Get-OwnerLensActivityEvidenceType -OperationName "") | Should -Be "Configuration Access"
+    (Get-OwnerLensActivityEvidenceType `
+      -OperationName "Microsoft.Authorization/roleAssignments/write" `
+      -ResourceId "/subscriptions/sub-1/providers/Microsoft.Authorization/roleAssignments/assignment-1" `
+      -RoleAssignmentId "/subscriptions/sub-1/providers/Microsoft.Authorization/roleAssignments/assignment-1") | Should -Be "Access Assignment"
+  }
+
   It "classifies Azure scopes" {
     (Get-AzureScopeParts -Scope "/subscriptions/sub-1").scopeType | Should -Be "Subscription"
 
@@ -819,6 +831,7 @@ Describe "OwnerLensLite Azure helper logic" {
     $evidence | Should -HaveCount 1
     $evidence[0].uri | Should -Be "https://st1.blob.core.windows.net/c/a.txt"
     $evidence[0].uri | Should -Not -Match "sig=|sp=|se=|skoid=|sktid="
+    $evidence[0].evidenceType | Should -Be "Data Access"
     $evidence[0].sasGeneratorObjectId | Should -Be "sas-user-1"
     $evidence[0].sasGeneratorTenantId | Should -Be "tenant-1"
     $evidence[0].sasSignedPermissions | Should -Be "r"
@@ -943,7 +956,10 @@ Describe "OwnerLensLite owner candidate table" {
     $candidates[0].confidence | Should -Be "HIGH"
     $candidates[0].relationship | Should -Be "Direct"
     $candidates[0].signal | Should -Be "OWNER"
+    $candidates[0].evidenceType | Should -Be "Ownership Metadata"
     $candidates[0].evidenceId | Should -Be "/servicePrincipals/sp-1/owners/user-1"
+    ($candidates | Where-Object candidateType -EQ "Tag").evidenceType | Should -Be "Ownership Metadata"
+    ($candidates | Where-Object candidate -EQ "App Owners").evidenceType | Should -Be "Directory Relationship"
     ($candidates | Where-Object candidateType -EQ "Tag").evidenceId | Should -Be "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
     ($candidates | Where-Object candidateType -EQ "Tag").candidate | Should -Be "costCenter=cc-42"
     ($candidates | Where-Object candidateType -EQ "Tag").relationship | Should -Be "Indirect"
@@ -1039,10 +1055,11 @@ Describe "OwnerLensLite owner candidate table" {
     $candidates[0].confidence | Should -Be "LOW"
     $candidates[0].relationship | Should -Be "None"
     $candidates[0].signal | Should -Be "NONE"
+    $candidates[0].evidenceType | Should -Be "No Evidence"
     $candidates[0].evidenceId | Should -Be "not-found"
   }
 
-  It "formats the candidate output as TSV with relationship and signal, without evidence type" {
+  It "formats the candidate output as TSV with relationship, signal, and evidence type" {
     $table = Format-OwnerCandidateTable -Candidates @(
       [pscustomobject]@{
         candidate     = "repoName=super-learning-backend"
@@ -1050,6 +1067,7 @@ Describe "OwnerLensLite owner candidate table" {
         confidence    = "MED"
         relationship  = "Indirect"
         signal        = "RBAC"
+        evidenceType  = "Data Access"
         evidenceId    = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
       }
     )
@@ -1057,9 +1075,9 @@ Describe "OwnerLensLite owner candidate table" {
     $lines = @($table -split "`r?`n")
 
     $lines | Should -HaveCount 2
-    $lines[0] | Should -Be "candidate`ttype`tconfidence`trelationship`tsignal`tevidenceId"
-    $lines[1] | Should -Be "repoName=super-learning-backend`tTag`tMED`tIndirect`tRBAC`t/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
-    $table | Should -Not -Match "evidenceType"
+    $lines[0] | Should -Be "candidate`ttype`tconfidence`trelationship`tsignal`tevidenceType`tevidenceId"
+    $lines[1] | Should -Be "repoName=super-learning-backend`tTag`tMED`tIndirect`tRBAC`tData Access`t/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Storage/storageAccounts/st1"
+    $table | Should -Match "evidenceType"
   }
 
   It "prefers principal name for user candidates" {

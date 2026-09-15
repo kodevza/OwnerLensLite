@@ -71,15 +71,15 @@ Describe "OwnerLens console anonymization" {
     $anonymized = ConvertTo-OwnerLensAnonymizedConsoleReport -Report $report
     $json = $anonymized | ConvertTo-Json -Depth 20
 
-    $json | Should -Not -Match "ada@example.com|Ada Lovelace|11111111-1111-1111-1111-111111111111|33333333-3333-3333-3333-333333333333"
+    $json | Should -Not -Match "ada@example.com|Ada Lovelace|Payments API|11111111-1111-1111-1111-111111111111|33333333-3333-3333-3333-333333333333"
     $json | Should -Not -Match "prodstorageacct01"
-    $anonymized.enterpriseApplication.displayName | Should -Be "Payments API"
+    $anonymized.enterpriseApplication.displayName | Should -Match "^application-[0-9]{4}$"
     @($anonymized.meta.ownerTagConfiguration.tagOwnerTagNames) | Should -Be @("owner")
     $anonymized.ownerCandidates[0].candidate | Should -Match "^user-[0-9]{4}$"
     $anonymized.ownerCandidates[0].evidenceId | Should -Match "guid-[0-9]{4}"
     $anonymized.azure.storageAccountsWithRbac[0].name | Should -Match "^storage-[0-9]{4}$"
     $anonymized.azure.blobReadEvidence[0].storageAccountName | Should -Be $anonymized.azure.storageAccountsWithRbac[0].name
-    $anonymized.azure.blobReadEvidence[0].uri | Should -Match "https://storage-[0-9]{4}\.blob\.core\.windows\.net/container/blob\.txt"
+    $anonymized.azure.blobReadEvidence[0].uri | Should -Be "[redacted-url]"
     @($anonymized.azure.blobReadCallers[0].storageAccounts) | Should -Be @($anonymized.azure.storageAccountsWithRbac[0].name)
   }
 
@@ -131,7 +131,7 @@ Describe "OwnerLens console anonymization" {
     }
     Mock Format-DependencyReport { $script:renderedReport = $Report }
 
-    $result = Invoke-OwnerLensLite -EnterpriseApplication "Payments API" -SkipLogin -AnonymizeConsoleOutput
+    $result = Invoke-OwnerLensLite -EnterpriseApplication "Payments API" -SkipLogin -AnonymizeOutput
     $renderedJson = $script:renderedReport | ConvertTo-Json -Depth 20
 
     $result.enterpriseApplication.objectId | Should -Be "11111111-1111-1111-1111-111111111111"
@@ -140,5 +140,32 @@ Describe "OwnerLens console anonymization" {
     $renderedJson | Should -Not -Match "ada@example.com|prodstorageacct01|11111111-1111-1111-1111-111111111111|33333333-3333-3333-3333-333333333333"
     $script:renderedReport.ownerCandidates[0].candidate | Should -Match "^user-[0-9]{4}$"
     $script:renderedReport.azure.storageAccountsWithRbac[0].name | Should -Match "^storage-[0-9]{4}$"
+  }
+
+  It "anonymizes JSON output when AnonymizeOutput is enabled through a variable" {
+    Mock Import-Module {}
+    Mock Get-Command { [pscustomobject]@{ Name = $Name } }
+    Mock Get-MgContext { [pscustomobject]@{ TenantId = "tenant-1" } }
+    Mock Get-AzContext { [pscustomobject]@{ Subscription = "sub-1" } }
+    Mock Invoke-OwnerLensAssessment {
+      [pscustomobject]@{
+        enterpriseApplication = [pscustomobject]@{
+          objectId    = "11111111-1111-1111-1111-111111111111"
+          displayName = "Payments API"
+        }
+        ownerCandidates       = @(
+          [pscustomobject]@{
+            candidate  = "ada@example.com"
+            evidenceId = "/servicePrincipals/11111111-1111-1111-1111-111111111111/owners/33333333-3333-3333-3333-333333333333"
+          }
+        )
+      }
+    }
+
+    $anonymizeOutput = $true
+    $json = Invoke-OwnerLensLite -EnterpriseApplication "Payments API" -SkipLogin -OutputJson -AnonymizeOutput:$anonymizeOutput
+
+    $json | Should -Not -Match "ada@example.com|11111111-1111-1111-1111-111111111111|33333333-3333-3333-3333-333333333333"
+    ($json | ConvertFrom-Json).ownerCandidates[0].candidate | Should -Match "^user-[0-9]{4}$"
   }
 }

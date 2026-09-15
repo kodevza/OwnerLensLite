@@ -1,7 +1,11 @@
 function Get-OwnerLensOwnerCandidatesTableRows {
   param([object[]]$OwnerCandidates)
 
-  @($OwnerCandidates | Select-Object candidate, @{ Name = "type"; Expression = { $_.candidateType } }, confidence, relationship, signal, @{ Name = "evidenceId"; Expression = { Format-OwnerLensOwnerCandidateEvidenceId -EvidenceId ([string]$_.evidenceId) } })
+  @(
+    $OwnerCandidates | Select-Object candidate, @{ Name = "type"; Expression = { $_.candidateType } },
+    confidence, relationship, signal, evidenceType,
+    @{ Name = "evidenceId"; Expression = { Format-OwnerLensOwnerCandidateEvidenceId -EvidenceId ([string]$_.evidenceId) } }
+  )
 }
 
 function Show-OwnerLensOwnerCandidatesTable {
@@ -12,5 +16,5 @@ function Show-OwnerLensOwnerCandidatesTable {
     -Style "bold dim" `
     -SurroundWithBlankRules `
     -Rows (Get-OwnerLensOwnerCandidatesTableRows -OwnerCandidates (Get-OwnerLensReportArray -Report $Report -Path "ownerCandidates")) `
-    -Property candidate, type, confidence, relationship, signal, evidenceId
+    -Property candidate, type, confidence, relationship, signal, evidenceType, evidenceId
 }

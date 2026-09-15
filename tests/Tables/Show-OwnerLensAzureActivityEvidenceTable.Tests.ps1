@@ -9,6 +9,7 @@ Describe "OwnerLens Azure Activity Evidence table" {
         [pscustomobject]@{
           eventTimestamp     = "2024-01-01T00:00:00Z"
           subscriptionName   = "Sub One"
+          evidenceType       = "Configuration Change"
           operationNameValue = "Microsoft.Web/sites/write"
           resourceId         = $resourceId
           status             = "Succeeded"
